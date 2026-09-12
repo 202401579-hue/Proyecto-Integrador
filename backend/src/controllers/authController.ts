@@ -10,7 +10,11 @@ import Usuario from '../models/Usuario';
  */
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { correo, password } = req.body;
+    // El ?? {} evita un TypeError si el cuerpo no llego parseado.
+    // Pasa cuando el cliente no manda la cabecera Content-Type: application/json:
+    // express.json() no lo procesa y req.body queda undefined. Sin esta guarda
+    // la peticion terminaria en un 500, cuando en realidad es un error del cliente.
+    const { correo, password } = req.body ?? {};
 
     if (!correo || !password) {
       res.status(400).json({ mensaje: 'El correo y la contraseña son obligatorios' });
