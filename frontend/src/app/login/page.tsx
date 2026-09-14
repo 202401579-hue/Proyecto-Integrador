@@ -26,7 +26,7 @@ export default function LoginPage() {
       }
       localStorage.setItem('token', datos.token);
       router.replace('/redireccion');
-    } catch (err) {
+    } catch {
       setError('No se pudo conectar con el servidor');
     } finally {
       setCargando(false);

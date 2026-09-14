@@ -45,14 +45,17 @@ export function estaExpirado(payload: TokenPayload): boolean {
   return Date.now() >= payload.exp * 1000;
 }
 
-export function obtenerSesion(): TokenPayload | null {
-  const token = obtenerToken();
+export function sesionDesdeToken(token: string | null): TokenPayload | null {
   if (!token) return null;
 
   const payload = decodificarToken(token);
   if (!payload || estaExpirado(payload)) return null;
 
   return payload;
+}
+
+export function obtenerSesion(): TokenPayload | null {
+  return sesionDesdeToken(obtenerToken());
 }
 
 export function obtenerRutaPorRol(rol: Rol): string {
