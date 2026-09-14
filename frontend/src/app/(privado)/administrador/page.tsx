@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { obtenerSesion } from "@/lib/session";
+import { useSesion } from "@/components/SesionProvider";
 
 export default function PaginaAdministrador() {
-  const [rol, setRol] = useState<string | null>(null);
-
-  useEffect(() => {
-    setRol(obtenerSesion()?.rol ?? null);
-  }, []);
+  const { rol } = useSesion();
 
   return <h1 className="h3">{rol}</h1>;
 }
