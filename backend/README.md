@@ -136,7 +136,9 @@ Todas las respuestas de error llevan la clave `mensaje`.
 | **400** `{ "mensaje": "..." }` | Falta un campo, email mal formado o categoría inválida |
 | **409** `{ "mensaje": "Ya existe un proveedor con esa identificación tributaria" }` | La identificación tributaria ya está registrada |
 
-`categoria` acepta solo `"construcción"` o `"general"`, en minúscula y con tilde.
+- `categoria` acepta solo `"construcción"` o `"general"`, en minúscula y con tilde.
+- `emailContacto` se valida en el backend: tiene que tener la forma
+  `usuario@dominio.ext`, sin espacios. Si no, **400** `"El email de contacto no es válido"`.
 
 ### `GET /api/proveedores`
 
@@ -146,23 +148,36 @@ Todas las respuestas de error llevan la clave `mensaje`.
 
 ```json
 {
+  "numeroPedido": "OC-2026-0001",
   "proveedorId": "6aad7047b8519521f86f6bbc",
-  "tipoProducto": "Cemento",
+  "tipoProducto": "construcción",
   "fechaHoraProgramada": "2026-09-21T09:00:00-06:00",
   "duracionEstimadaMinutos": 90
 }
 ```
 
+Los cinco campos son obligatorios.
+
+- `numeroPedido`: código de la orden de compra. **Lo escribe el coordinador en
+  el formulario; el backend no lo genera.** Es texto y no se puede repetir
+  entre pedidos (índice único en MongoDB). Se le quitan los espacios de los
+  extremos, y mayúsculas y minúsculas cuentan como distintas.
+- `tipoProducto`: lista cerrada, igual que la `categoria` del proveedor. Solo
+  `"construcción"` o `"general"`, en minúscula y con tilde.
+
 El backend calcula `inicioVentana` (= `fechaHoraProgramada`) y `finVentana`
 (= inicio + duración), y guarda el pedido con `estado: "PROGRAMADO"`. Si el
-cliente manda esos tres campos, se ignoran.
+cliente manda esos tres campos, se ignoran. El modelo además rechaza cualquier
+pedido cuya `finVentana` no sea posterior a su `inicioVentana`.
 
 Las validaciones se hacen en este orden y la primera que falla corta:
 
 | Respuesta | Cuándo |
 |---|---|
-| **400** | Falta un campo, la fecha no es válida o la duración no es un entero mayor a 0 |
+| **400** | Falta un campo, `numeroPedido` no es texto, la fecha no es válida o la duración no es un entero mayor a 0 |
+| **400** `"El tipo de producto debe ser \"construcción\" o \"general\""` | `tipoProducto` no es uno de los dos valores |
 | **400** `"El proveedor indicado no existe"` | El `proveedorId` no existe o tiene un formato inválido |
+| **400** `"Ya existe un pedido con el número OC-2026-0001"` | El `numeroPedido` ya está usado en otro pedido |
 | **400** `"No se puede programar un pedido en una fecha pasada"` | La ventana empieza antes del momento actual |
 | **400** `"El pedido debe programarse dentro del horario operativo (07:00 a 17:00)"` | La ventana no entra completa entre las 07:00 y las 17:00 |
 | **409** con `alternativas` | La ventana se solapa con otro pedido `PROGRAMADO` |
@@ -197,8 +212,9 @@ viene poblado con el proveedor completo, no solo con su id:
 [
   {
     "_id": "6aad70236a44d650cfcbf31d",
+    "numeroPedido": "OC-2026-0001",
     "proveedorId": { "_id": "6aad7047b8519521f86f6bbc", "razonSocial": "Cementos del Norte SA", "...": "..." },
-    "tipoProducto": "Cemento",
+    "tipoProducto": "construcción",
     "fechaHoraProgramada": "2026-09-21T15:00:00.000Z",
     "duracionEstimadaMinutos": 90,
     "inicioVentana": "2026-09-21T15:00:00.000Z",
@@ -235,8 +251,8 @@ provocar un rechazo por solapamiento con alternativas.
    `coordinador@logistica.com` / `Coord123`. Si responde **401 "Credenciales
    inválidas"**, los usuarios de esa base tienen otras contraseñas: correr
    `npm run seed`, que los borra y los recrea con las contraseñas de la tabla
-   de usuarios de prueba. Avisar al equipo antes, porque cambia las
-   contraseñas de todos.
+   de usuarios de prueba. Cada integrante tiene su propia base local, así que
+   esto solo afecta a la base de quien lo corre.
 2. **El mismo día de la demo, antes de empezar,** correr:
 
    ```bash
@@ -245,7 +261,7 @@ provocar un rechazo por solapamiento con alternativas.
 
    Limpia proveedores y pedidos (nunca usuarios) y carga:
    - 3 proveedores: uno de `construcción` y dos de `general`;
-   - 1 pedido **bloqueador** `PROGRAMADO` de **09:00 a 10:00** (60 minutos),
+   - 1 pedido **bloqueador** `PROGRAMADO`, número `OC-2026-0001`, de **09:00 a 10:00** (60 minutos),
      el **próximo día hábil** a partir de mañana: si se corre un viernes, cae
      el lunes; si se corre el lunes, cae el martes.
 3. **Anotar lo que imprime.** La fecha del bloqueador se calcula en cada
@@ -258,11 +274,12 @@ provocar un rechazo por solapamiento con alternativas.
      - 6aad77af7a4b5e8c974caf87  general       Distribuidora Comercial Altamira S.A. de C.V.
      - 6aad77af7a4b5e8c974caf88  general       Suministros Industriales Norteños S. de R.L. de C.V.
    [Seed demo] Pedido bloqueador creado:
+     - numero:    OC-2026-0001
      - dia:       lunes, 21 de septiembre de 2026
      - horario:   09:00 a 10:00 (60 min, PROGRAMADO)
    [Seed demo] Para la demo (POST /api/pedidos, 60 min):
-     - pedido valido -> "fechaHoraProgramada": "2026-09-21T11:00:00-06:00"
-     - solapamiento  -> "fechaHoraProgramada": "2026-09-21T09:30:00-06:00"
+     - pedido valido -> "numeroPedido": "OC-2026-0002", "fechaHoraProgramada": "2026-09-21T11:00:00-06:00"
+     - solapamiento  -> "numeroPedido": "OC-2026-0003", "fechaHoraProgramada": "2026-09-21T09:30:00-06:00"
    ```
 
 4. Levantar el servidor con `npm run dev` e iniciar sesión como Coordinador.
@@ -288,12 +305,13 @@ registrarlo de nuevo, volver a correr `npm run seed:demo`.
 
 **2. Crear un pedido válido** → `POST /api/pedidos` → **201**
 
-Usar un `proveedorId` de la salida del seed y la fecha de "pedido valido":
+Usar un `proveedorId` de la salida del seed y los datos de "pedido valido":
 
 ```json
 {
+  "numeroPedido": "OC-2026-0002",
   "proveedorId": "<id de un proveedor del seed>",
-  "tipoProducto": "Material de oficina",
+  "tipoProducto": "general",
   "fechaHoraProgramada": "<fecha de 'pedido valido'>",
   "duracionEstimadaMinutos": 60
 }
@@ -301,13 +319,18 @@ Usar un `proveedorId` de la salida del seed y la fecha de "pedido valido":
 
 **3. Rechazo por solapamiento** → `POST /api/pedidos` → **409**
 
-El mismo body, pero con la fecha de "solapamiento" (09:30, que choca con el
-bloqueador de 09:00 a 10:00). La respuesta trae `mensaje` y 3 `alternativas`
-libres. Si ya se hizo el caso 2 a las 11:00, las alternativas se saltean ese
+El mismo body, pero con los datos de "solapamiento": otro `numeroPedido`
+(`OC-2026-0003`) y la hora 09:30, que choca con el bloqueador de 09:00 a
+10:00. Hay que cambiar el número: si se repite uno ya usado, el backend
+responde 400 por número duplicado antes de revisar el horario. La respuesta
+trae `mensaje` y 3 `alternativas` libres. Si ya se hizo el caso 2 a las 11:00, las alternativas se saltean ese
 horario: 10:00, 12:00 y 13:00.
 
 ### Tener en cuenta
 
+- Después de bajar este cambio, correr `npm run seed:demo` aunque ya se haya
+  corrido antes. Los pedidos cargados con versiones anteriores no tienen
+  `numeroPedido` y tienen un `tipoProducto` que ya no es válido.
 - Los feriados no se contemplan: el seed los trata como días hábiles (por
   ejemplo, el 1 de enero).
 - Las fechas de las respuestas vienen en UTC (terminan en `Z`): 15:00Z son las

@@ -9,6 +9,14 @@ export const CATEGORIAS_PROVEEDOR = ['construcción', 'general'] as const;
 
 export type CategoriaProveedor = (typeof CATEGORIAS_PROVEEDOR)[number];
 
+/**
+ * La "ó" puede llegar como un solo caracter o como "o" + tilde combinable
+ * (segun el teclado o el sistema operativo). Se ven iguales pero no son
+ * el mismo texto, asi que se normaliza a NFC antes de validar contra la lista.
+ */
+export const normalizarNFC = (valor: unknown): unknown =>
+  typeof valor === 'string' ? valor.normalize('NFC') : valor;
+
 export interface IProveedor extends Document {
   razonSocial: string;
   identificacionTributaria: string;
@@ -36,10 +44,7 @@ const ProveedorSchema = new Schema<IProveedor>(
     categoria: {
       type: String,
       required: [true, 'La categoría es obligatoria'],
-      // La "ó" puede llegar como un solo caracter o como "o" + tilde combinable
-      // (segun el teclado o el sistema operativo). Se ven iguales pero no son
-      // el mismo texto, asi que se normaliza a NFC antes de validar el enum.
-      set: (valor: unknown) => (typeof valor === 'string' ? valor.normalize('NFC') : valor),
+      set: normalizarNFC,
       enum: {
         values: [...CATEGORIAS_PROVEEDOR],
         message: 'La categoría debe ser "construcción" o "general"'

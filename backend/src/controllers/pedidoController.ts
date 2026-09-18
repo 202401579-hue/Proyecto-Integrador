@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import Pedido, { IPedido } from '../models/Pedido';
-import Proveedor from '../models/Proveedor';
+import Pedido, { IPedido, TIPOS_PRODUCTO, TipoProducto } from '../models/Pedido';
+import Proveedor, { normalizarNFC } from '../models/Proveedor';
 import {
   HORARIO_OPERATIVO,
   VentanaHoraria,
@@ -50,12 +50,15 @@ type ResultadoAlta =
 /**
  * POST /api/pedidos
  *
- * Recibe { proveedorId, tipoProducto, fechaHoraProgramada, duracionEstimadaMinutos },
- * calcula inicioVentana y finVentana, y guarda el pedido como PROGRAMADO (201).
+ * Recibe { numeroPedido, proveedorId, tipoProducto, fechaHoraProgramada,
+ * duracionEstimadaMinutos }, calcula inicioVentana y finVentana, y guarda
+ * el pedido como PROGRAMADO (201).
  *
  * Orden de validacion:
  *   1. campos obligatorios y formato                   -> 400
+ *      tipoProducto dentro de la lista cerrada          -> 400
  *   2. que el proveedor exista                          -> 400
+ *      que el numeroPedido no este repetido             -> 400
  *   3. calcular la ventana
  *   4. que no sea una fecha pasada                      -> 400
  *      horario operativo                                -> 400
@@ -64,20 +67,49 @@ type ResultadoAlta =
  */
 export const crearPedido = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { proveedorId, tipoProducto, fechaHoraProgramada, duracionEstimadaMinutos } =
-      req.body ?? {};
+    const {
+      numeroPedido,
+      proveedorId,
+      tipoProducto,
+      fechaHoraProgramada,
+      duracionEstimadaMinutos
+    } = req.body ?? {};
 
     // 1. Campos obligatorios. Se compara contra undefined/null/'' y no con !valor,
     // porque !0 es true y una duracion 0 tiene que caer en el mensaje de formato.
-    const faltaCampo = [proveedorId, tipoProducto, fechaHoraProgramada, duracionEstimadaMinutos].some(
-      (valor) => valor === undefined || valor === null || String(valor).trim() === ''
-    );
+    const faltaCampo = [
+      numeroPedido,
+      proveedorId,
+      tipoProducto,
+      fechaHoraProgramada,
+      duracionEstimadaMinutos
+    ].some((valor) => valor === undefined || valor === null || String(valor).trim() === '');
 
     if (faltaCampo) {
       res.status(400).json({
         mensaje:
-          'proveedorId, tipoProducto, fechaHoraProgramada y duracionEstimadaMinutos son obligatorios'
+          'numeroPedido, proveedorId, tipoProducto, fechaHoraProgramada y duracionEstimadaMinutos son obligatorios'
       });
+      return;
+    }
+
+    // Es un codigo que escribe el coordinador: se exige texto para que un
+    // objeto o un arreglo no terminen guardados como "[object Object]".
+    if (typeof numeroPedido !== 'string') {
+      res.status(400).json({ mensaje: 'numeroPedido debe ser un texto' });
+      return;
+    }
+
+    const numero = numeroPedido.trim();
+
+    // Lista cerrada, igual que la categoria del proveedor. Se normaliza la
+    // tilde antes de comparar (ver normalizarNFC en el modelo Proveedor).
+    const tipo = normalizarNFC(tipoProducto) as TipoProducto;
+
+    if (!TIPOS_PRODUCTO.includes(tipo)) {
+      res
+        .status(400)
+        .json({ mensaje: 'El tipo de producto debe ser "construcción" o "general"' });
       return;
     }
 
@@ -107,6 +139,14 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
 
     if (!proveedorExiste) {
       res.status(400).json({ mensaje: 'El proveedor indicado no existe' });
+      return;
+    }
+
+    // El numero de pedido es el codigo de la orden de compra: no se puede
+    // repetir. El indice unico del modelo es la garantia final (ver el catch);
+    // este chequeo previo permite responder antes de calcular la ventana.
+    if (await Pedido.exists({ numeroPedido: numero })) {
+      res.status(400).json({ mensaje: `Ya existe un pedido con el número ${numero}` });
       return;
     }
 
@@ -172,8 +212,9 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
       // Sin choques: se guarda. El estado se fija aca y no se lee del body,
       // para que el cliente no pueda crear un pedido en otro estado.
       const pedido = await Pedido.create({
+        numeroPedido: numero,
         proveedorId,
-        tipoProducto,
+        tipoProducto: tipo,
         fechaHoraProgramada: inicio,
         duracionEstimadaMinutos: duracion,
         inicioVentana: ventana.inicio,
@@ -207,6 +248,14 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
           ? `El campo ${primerError.path} tiene un formato inválido`
           : primerError.message;
       res.status(400).json({ mensaje });
+      return;
+    }
+
+    // 11000 es el codigo de MongoDB para una clave unica duplicada. Llega aca
+    // si el numeroPedido se repite y el chequeo previo no lo vio (por ejemplo,
+    // un alta simultanea con el mismo numero). Mismo 400 que el chequeo previo.
+    if ((error as { code?: number }).code === 11000) {
+      res.status(400).json({ mensaje: 'Ya existe un pedido con ese número de pedido' });
       return;
     }
 

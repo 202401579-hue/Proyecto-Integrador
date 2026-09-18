@@ -49,6 +49,10 @@ const proveedoresDePrueba = [
 const HORA_BLOQUEADOR = 9;
 const DURACION_BLOQUEADOR_MINUTOS = 60;
 
+// Codigo de orden de compra del bloqueador. Los pedidos que se creen en
+// la demo tienen que usar otro, porque numeroPedido no se puede repetir.
+const NUMERO_PEDIDO_BLOQUEADOR = 'OC-2026-0001';
+
 /**
  * Devuelve el proximo dia habil a partir de manana, a las `hora`:00 en la
  * hora local del servidor. Sabado y domingo se saltean (viernes -> lunes).
@@ -120,8 +124,9 @@ const sembrar = async (): Promise<void> => {
   );
 
   const bloqueador = await Pedido.create({
+    numeroPedido: NUMERO_PEDIDO_BLOQUEADOR,
     proveedorId: proveedorBloqueador._id,
-    tipoProducto: 'Cemento gris en sacos de 50 kg',
+    tipoProducto: 'construcción',
     fechaHoraProgramada: ventana.inicio,
     duracionEstimadaMinutos: DURACION_BLOQUEADOR_MINUTOS,
     inicioVentana: ventana.inicio,
@@ -146,6 +151,7 @@ const sembrar = async (): Promise<void> => {
 
   console.log('[Seed demo] Pedido bloqueador creado:');
   console.log(`  - id:        ${String(bloqueador._id)}`);
+  console.log(`  - numero:    ${bloqueador.numeroPedido}`);
   console.log(`  - proveedor: ${proveedorBloqueador.razonSocial}`);
   console.log(`  - dia:       ${dia}`);
   console.log(
@@ -154,8 +160,12 @@ const sembrar = async (): Promise<void> => {
   console.log(`  - inicio:    ${isoLocal(ventana.inicio)}`);
 
   console.log('[Seed demo] Para la demo (POST /api/pedidos, 60 min):');
-  console.log(`  - pedido valido -> "fechaHoraProgramada": "${isoLocal(libre)}"`);
-  console.log(`  - solapamiento  -> "fechaHoraProgramada": "${isoLocal(choque)}"`);
+  console.log(
+    `  - pedido valido -> "numeroPedido": "OC-2026-0002", "fechaHoraProgramada": "${isoLocal(libre)}"`
+  );
+  console.log(
+    `  - solapamiento  -> "numeroPedido": "OC-2026-0003", "fechaHoraProgramada": "${isoLocal(choque)}"`
+  );
 
   await mongoose.disconnect();
   console.log('[Seed demo] Listo.');
