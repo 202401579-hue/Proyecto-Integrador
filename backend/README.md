@@ -47,6 +47,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 |---|---|
 | `npm run dev` | Servidor en modo desarrollo, recarga al guardar |
 | `npm run seed` | Borra los usuarios y recrea los tres de prueba |
+| `npm run seed:demo` | Borra proveedores y pedidos y carga los datos de la demo del Sprint 1 (no toca usuarios) |
 | `npm run build` | Compila TypeScript a `dist/` |
 | `npm start` | Ejecuta la versión compilada |
 
@@ -223,6 +224,99 @@ viene poblado con el proveedor completo, no solo con su id:
 
 ---
 
+## Demo del Sprint 1
+
+Se muestran tres casos: registrar un proveedor, crear un pedido válido y
+provocar un rechazo por solapamiento con alternativas.
+
+### Antes de la demo
+
+1. **Comprobar que el login funciona.** Hacer `POST /api/auth/login` con
+   `coordinador@logistica.com` / `Coord123`. Si responde **401 "Credenciales
+   inválidas"**, los usuarios de esa base tienen otras contraseñas: correr
+   `npm run seed`, que los borra y los recrea con las contraseñas de la tabla
+   de usuarios de prueba. Avisar al equipo antes, porque cambia las
+   contraseñas de todos.
+2. **El mismo día de la demo, antes de empezar,** correr:
+
+   ```bash
+   npm run seed:demo
+   ```
+
+   Limpia proveedores y pedidos (nunca usuarios) y carga:
+   - 3 proveedores: uno de `construcción` y dos de `general`;
+   - 1 pedido **bloqueador** `PROGRAMADO` de **09:00 a 10:00** (60 minutos),
+     el **próximo día hábil** a partir de mañana: si se corre un viernes, cae
+     el lunes; si se corre el lunes, cae el martes.
+3. **Anotar lo que imprime.** La fecha del bloqueador se calcula en cada
+   corrida, así que los IDs y las fechas cambian. Usar siempre los de la
+   última corrida. Salida de ejemplo:
+
+   ```
+   [Seed demo] Proveedores creados: 3
+     - 6aad77af7a4b5e8c974caf86  construcción  Cementos y Agregados del Valle S.A. de C.V.
+     - 6aad77af7a4b5e8c974caf87  general       Distribuidora Comercial Altamira S.A. de C.V.
+     - 6aad77af7a4b5e8c974caf88  general       Suministros Industriales Norteños S. de R.L. de C.V.
+   [Seed demo] Pedido bloqueador creado:
+     - dia:       lunes, 21 de septiembre de 2026
+     - horario:   09:00 a 10:00 (60 min, PROGRAMADO)
+   [Seed demo] Para la demo (POST /api/pedidos, 60 min):
+     - pedido valido -> "fechaHoraProgramada": "2026-09-21T11:00:00-06:00"
+     - solapamiento  -> "fechaHoraProgramada": "2026-09-21T09:30:00-06:00"
+   ```
+
+4. Levantar el servidor con `npm run dev` e iniciar sesión como Coordinador.
+   Todas las peticiones llevan `Authorization: Bearer <token>`.
+
+### Los tres casos
+
+**1. Registrar un proveedor** → `POST /api/proveedores` → **201**
+
+```json
+{
+  "razonSocial": "Ferretería y Materiales San Ángel S.A. de C.V.",
+  "identificacionTributaria": "FMS090311QW4",
+  "categoria": "construcción",
+  "contactoNombre": "Ricardo Salinas Mora",
+  "telefono": "+52 55 5550 1234",
+  "emailContacto": "pedidos@ferresanangel.com.mx"
+}
+```
+
+Si se repite la misma `identificacionTributaria`, responde 409. Para
+registrarlo de nuevo, volver a correr `npm run seed:demo`.
+
+**2. Crear un pedido válido** → `POST /api/pedidos` → **201**
+
+Usar un `proveedorId` de la salida del seed y la fecha de "pedido valido":
+
+```json
+{
+  "proveedorId": "<id de un proveedor del seed>",
+  "tipoProducto": "Material de oficina",
+  "fechaHoraProgramada": "<fecha de 'pedido valido'>",
+  "duracionEstimadaMinutos": 60
+}
+```
+
+**3. Rechazo por solapamiento** → `POST /api/pedidos` → **409**
+
+El mismo body, pero con la fecha de "solapamiento" (09:30, que choca con el
+bloqueador de 09:00 a 10:00). La respuesta trae `mensaje` y 3 `alternativas`
+libres. Si ya se hizo el caso 2 a las 11:00, las alternativas se saltean ese
+horario: 10:00, 12:00 y 13:00.
+
+### Tener en cuenta
+
+- Los feriados no se contemplan: el seed los trata como días hábiles (por
+  ejemplo, el 1 de enero).
+- Las fechas de las respuestas vienen en UTC (terminan en `Z`): 15:00Z son las
+  09:00 en la hora de México (UTC-6).
+- Ensayar antes ensucia la base. Correr `npm run seed:demo` otra vez justo
+  antes de la demo para arrancar limpios.
+
+---
+
 ## Estructura
 
 ```
@@ -245,7 +339,9 @@ backend/
 │   │   ├── proveedorRoutes.ts        → rutas de /api/proveedores
 │   │   └── pedidoRoutes.ts           → rutas de /api/pedidos
 │   ├── services/ventanaHoraria.ts    → solapamiento, huecos libres y alternativas
-│   ├── scripts/seed.ts               → carga los usuarios de prueba
+│   ├── scripts/
+│   │   ├── seed.ts                   → carga los usuarios de prueba
+│   │   └── seedDemo.ts               → carga proveedores y el pedido bloqueador de la demo
 │   ├── types/                        → tipos del payload y del Request
 │   └── server.ts                     → Express, CORS y arranque
 ├── .env.example
