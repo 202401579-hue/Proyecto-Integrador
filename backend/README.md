@@ -108,18 +108,143 @@ Comprueba que el servidor está arriba: `{ "estado": "ok" }`.
 
 ---
 
+## Sprint 1 — Proveedores y programación de pedidos
+
+Módulo del rol **Coordinador**. Todas las rutas piden la cabecera
+`Authorization: Bearer <token>` de un usuario Coordinador: sin token responden
+**401** y con otro rol **403**.
+
+Todas las respuestas de error llevan la clave `mensaje`.
+
+### `POST /api/proveedores`
+
+```json
+{
+  "razonSocial": "Cementos del Norte SA",
+  "identificacionTributaria": "30-71234567-9",
+  "categoria": "construcción",
+  "contactoNombre": "Laura Gómez",
+  "telefono": "+52 55 1234 5678",
+  "emailContacto": "laura@cementosnorte.com"
+}
+```
+
+| Respuesta | Cuándo |
+|---|---|
+| **201** con el proveedor creado | Datos correctos |
+| **400** `{ "mensaje": "..." }` | Falta un campo, email mal formado o categoría inválida |
+| **409** `{ "mensaje": "Ya existe un proveedor con esa identificación tributaria" }` | La identificación tributaria ya está registrada |
+
+`categoria` acepta solo `"construcción"` o `"general"`, en minúscula y con tilde.
+
+### `GET /api/proveedores`
+
+**200** con el arreglo de proveedores, ordenado por razón social.
+
+### `POST /api/pedidos`
+
+```json
+{
+  "proveedorId": "6aad7047b8519521f86f6bbc",
+  "tipoProducto": "Cemento",
+  "fechaHoraProgramada": "2026-09-21T09:00:00-06:00",
+  "duracionEstimadaMinutos": 90
+}
+```
+
+El backend calcula `inicioVentana` (= `fechaHoraProgramada`) y `finVentana`
+(= inicio + duración), y guarda el pedido con `estado: "PROGRAMADO"`. Si el
+cliente manda esos tres campos, se ignoran.
+
+Las validaciones se hacen en este orden y la primera que falla corta:
+
+| Respuesta | Cuándo |
+|---|---|
+| **400** | Falta un campo, la fecha no es válida o la duración no es un entero mayor a 0 |
+| **400** `"El proveedor indicado no existe"` | El `proveedorId` no existe o tiene un formato inválido |
+| **400** `"No se puede programar un pedido en una fecha pasada"` | La ventana empieza antes del momento actual |
+| **400** `"El pedido debe programarse dentro del horario operativo (07:00 a 17:00)"` | La ventana no entra completa entre las 07:00 y las 17:00 |
+| **409** con `alternativas` | La ventana se solapa con otro pedido `PROGRAMADO` |
+| **201** con el pedido y el proveedor poblado | Todo correcto |
+
+Respuesta **409**:
+
+```json
+{
+  "mensaje": "La ventana horaria se solapa con otro pedido ya programado",
+  "alternativas": [
+    { "inicioVentana": "2026-09-21T19:00:00.000Z", "finVentana": "2026-09-21T20:00:00.000Z" },
+    { "inicioVentana": "2026-09-21T20:00:00.000Z", "finVentana": "2026-09-21T21:00:00.000Z" },
+    { "inicioVentana": "2026-09-21T21:00:00.000Z", "finVentana": "2026-09-21T22:00:00.000Z" }
+  ]
+}
+```
+
+- Las alternativas son 3 ventanas libres de la misma duración. Se buscan hacia
+  adelante desde la hora pedida y, si el día no alcanza, siguen desde las 07:00
+  de los días siguientes (hasta 7 días).
+- Dos pedidos consecutivos **no** se solapan: uno de 09:00 a 10:00 y otro de
+  10:00 a 11:00 se aceptan los dos.
+- Un 400 por horario operativo **no** trae alternativas.
+
+### `GET /api/pedidos`
+
+**200** con los pedidos ordenados por `inicioVentana`. El campo `proveedorId`
+viene poblado con el proveedor completo, no solo con su id:
+
+```json
+[
+  {
+    "_id": "6aad70236a44d650cfcbf31d",
+    "proveedorId": { "_id": "6aad7047b8519521f86f6bbc", "razonSocial": "Cementos del Norte SA", "...": "..." },
+    "tipoProducto": "Cemento",
+    "fechaHoraProgramada": "2026-09-21T15:00:00.000Z",
+    "duracionEstimadaMinutos": 90,
+    "inicioVentana": "2026-09-21T15:00:00.000Z",
+    "finVentana": "2026-09-21T16:30:00.000Z",
+    "estado": "PROGRAMADO"
+  }
+]
+```
+
+### Fechas y horario operativo
+
+- El horario de **07:00 a 17:00** se mide en la **hora local del servidor**.
+  Se cambia en `HORARIO_OPERATIVO`, dentro de `src/services/ventanaHoraria.ts`.
+- Conviene mandar `fechaHoraProgramada` con zona horaria
+  (`2026-09-21T09:00:00-06:00`). Si llega sin zona (`2026-09-21T09:00`, que es
+  lo que da un `<input type="datetime-local">`), se interpreta en la hora local
+  del servidor.
+- Las fechas de las respuestas vienen en ISO y en UTC (terminan en `Z`). Para
+  mostrarlas en la hora local, el frontend las pasa por `new Date(...)`.
+- Las altas de pedidos se procesan de a una, para que dos coordinadores no
+  puedan reservar el mismo horario a la vez. Esto vale mientras el backend
+  corra como un único proceso.
+
+---
+
 ## Estructura
 
 ```
 backend/
 ├── src/
 │   ├── config/database.ts            → conexión con Mongoose
-│   ├── controllers/authController.ts → lógica del login
+│   ├── controllers/
+│   │   ├── authController.ts         → lógica del login
+│   │   ├── proveedorController.ts    → alta y listado de proveedores
+│   │   └── pedidoController.ts       → alta (validaciones + solape) y listado de pedidos
 │   ├── middlewares/
 │   │   ├── verificarToken.ts         → valida la firma del JWT (401)
 │   │   └── autorizarRoles.ts         → compara el rol del token (403)
-│   ├── models/Usuario.ts             → esquema + hash bcrypt + comparación
-│   ├── routes/authRoutes.ts          → rutas de /api/auth
+│   ├── models/
+│   │   ├── Usuario.ts                → esquema + hash bcrypt + comparación
+│   │   ├── Proveedor.ts              → esquema del proveedor (colección proveedores)
+│   │   └── Pedido.ts                 → esquema del pedido, referencia a Proveedor
+│   ├── routes/
+│   │   ├── authRoutes.ts             → rutas de /api/auth
+│   │   ├── proveedorRoutes.ts        → rutas de /api/proveedores
+│   │   └── pedidoRoutes.ts           → rutas de /api/pedidos
+│   ├── services/ventanaHoraria.ts    → solapamiento, huecos libres y alternativas
 │   ├── scripts/seed.ts               → carga los usuarios de prueba
 │   ├── types/                        → tipos del payload y del Request
 │   └── server.ts                     → Express, CORS y arranque

@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { conectarDB } from './config/database';
 import authRoutes from './routes/authRoutes';
+import proveedorRoutes from './routes/proveedorRoutes';
+import pedidoRoutes from './routes/pedidoRoutes';
 
 // Carga las variables de entorno antes que cualquier otra cosa,
 // porque la conexion a Mongo y la firma del JWT dependen de ellas.
@@ -21,6 +23,12 @@ app.use(express.json());
 
 // Rutas de autenticacion: POST /api/auth/login
 app.use('/api/auth', authRoutes);
+
+// Rutas del modulo de proveedores (rol Coordinador)
+app.use('/api/proveedores', proveedorRoutes);
+
+// Rutas del modulo de programacion de pedidos (rol Coordinador)
+app.use('/api/pedidos', pedidoRoutes);
 
 // Ruta de verificacion: sirve para comprobar que el servidor esta arriba.
 app.get('/api/health', (_req: Request, res: Response) => {
