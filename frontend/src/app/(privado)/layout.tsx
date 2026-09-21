@@ -7,10 +7,7 @@ import { obtenerRutaPorRol, sesionDesdeToken } from "@/lib/session";
 import NavbarPrivado from "@/components/NavbarPrivado";
 import { SesionProvider } from "@/components/SesionProvider";
 
-// La sesion se lee de localStorage en cada render, sin copiarla a un estado de
-// React. Asi no queda un estado viejo en memoria que haya que limpiar al salir.
 function suscribirseAlToken(avisar: () => void) {
-  // "storage" avisa cuando otra pestana cambia el token, por ejemplo al hacer logout.
   window.addEventListener("storage", avisar);
   return () => window.removeEventListener("storage", avisar);
 }
@@ -22,26 +19,28 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
   const router = useRouter();
   const pathname = usePathname();
 
-  // false mientras se renderiza en el servidor, true ya montado en el navegador.
   const montado = useSyncExternalStore(sinSuscripcion, () => true, () => false);
   const token = useSyncExternalStore(suscribirseAlToken, leerToken, sinTokenEnServidor);
 
   const sesion = sesionDesdeToken(token);
   const rutaDelRol = sesion ? obtenerRutaPorRol(sesion.rol) : null;
 
+  // Permite la ruta exacta del rol y cualquier subruta debajo de ella,
+  // por ejemplo /coordinador/proveedores o /coordinador/pedidos.
+  const dentroDeSuSeccion =
+    !!rutaDelRol && (pathname === rutaDelRol || pathname.startsWith(`${rutaDelRol}/`));
+
   useEffect(() => {
     if (!montado) return;
 
     if (!rutaDelRol) {
       router.replace("/login");
-    } else if (pathname !== rutaDelRol) {
-      // Cada rol solo puede estar en su propia seccion.
+    } else if (!dentroDeSuSeccion) {
+      // Cada rol solo puede estar dentro de su propia seccion.
       router.replace(rutaDelRol);
     }
-  }, [montado, rutaDelRol, pathname, router]);
+  }, [montado, rutaDelRol, dentroDeSuSeccion, router]);
 
-  // Al volver con "atras", el navegador puede restaurar la pagina desde su
-  // cache (bfcache) sin volver a ejecutar los efectos. Se revalida en pageshow.
   useEffect(() => {
     const revalidar = (evento: PageTransitionEvent) => {
       if (evento.persisted && !sesionDesdeToken(leerToken())) {
@@ -52,8 +51,7 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
     return () => window.removeEventListener("pageshow", revalidar);
   }, []);
 
-  // Mientras no se confirme la sesion y el rol, no se muestra nada.
-  if (!montado || !sesion || pathname !== rutaDelRol) {
+  if (!montado || !sesion || !dentroDeSuSeccion) {
     return null;
   }
 
