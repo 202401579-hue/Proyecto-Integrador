@@ -24,6 +24,7 @@ export interface IProveedor extends Document {
   contactoNombre: string;
   telefono: string;
   emailContacto: string;
+  estado: string;
 }
 
 const ProveedorSchema = new Schema<IProveedor>(
@@ -66,6 +67,13 @@ const ProveedorSchema = new Schema<IProveedor>(
       trim: true,
       lowercase: true,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'El email de contacto no es válido']
+    },
+    // Baja logica: en lugar de borrar el proveedor se lo marca inactivo,
+    // asi los pedidos que lo referencian siguen resolviendo el populate.
+    estado: {
+      type: String,
+      enum: ['activo', 'inactivo'],
+      default: 'activo'
     }
   },
   { timestamps: true }
