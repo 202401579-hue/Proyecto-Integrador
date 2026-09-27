@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Proveedor from '../models/Proveedor';
+import { nombreDelUsuario } from '../services/usuarioAuditoria';
 
 /**
  * POST /api/proveedores
@@ -21,14 +22,17 @@ export const crearProveedor = async (req: Request, res: Response): Promise<void>
     } = req.body ?? {};
 
     // Se arma el objeto campo por campo para que un cliente no pueda
-    // colar propiedades extra (por ejemplo _id o createdAt) en el documento.
+    // colar propiedades extra (por ejemplo _id, activo o fechaCreacion).
     const proveedor = await Proveedor.create({
       razonSocial,
       identificacionTributaria,
       categoria,
       contactoNombre,
       telefono,
-      emailContacto
+      emailContacto,
+      // Auditoria: quien dio el alta. El nombre sale de la base, no del
+      // token, porque el token solo trae id, correo y rol.
+      usuarioCreacion: await nombreDelUsuario(req)
     });
 
     res.status(201).json(proveedor);

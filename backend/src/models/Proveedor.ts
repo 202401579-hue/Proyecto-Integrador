@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import { CamposAuditoria, camposAuditoria, opcionesAuditoria } from './auditoria';
 
 /**
  * Valores exactos de la categoria, segun el contrato de la API.
@@ -17,7 +18,7 @@ export type CategoriaProveedor = (typeof CATEGORIAS_PROVEEDOR)[number];
 export const normalizarNFC = (valor: unknown): unknown =>
   typeof valor === 'string' ? valor.normalize('NFC') : valor;
 
-export interface IProveedor extends Document {
+export interface IProveedor extends Document, CamposAuditoria {
   razonSocial: string;
   identificacionTributaria: string;
   categoria: CategoriaProveedor;
@@ -66,9 +67,11 @@ const ProveedorSchema = new Schema<IProveedor>(
       trim: true,
       lowercase: true,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'El email de contacto no es válido']
-    }
+    },
+    // activo, usuarioCreacion y usuarioActualizacion (ver models/auditoria.ts)
+    ...camposAuditoria()
   },
-  { timestamps: true }
+  opcionesAuditoria
 );
 
 // El tercer argumento fija el nombre de la coleccion. Sin el, Mongoose

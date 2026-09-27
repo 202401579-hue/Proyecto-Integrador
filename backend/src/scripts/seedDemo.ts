@@ -7,6 +7,11 @@ import { calcularVentana } from '../services/ventanaHoraria';
 
 dotenv.config();
 
+// Autor que queda en los campos de auditoria de los datos sembrados.
+// No son altas hechas por una persona desde la API, y dejarlas sin autor
+// haria pensar que la auditoria no funciona.
+const USUARIO_SEED = 'Seed de demostración';
+
 /**
  * Datos para la demostracion del modulo de proveedores y pedidos.
  *
@@ -25,7 +30,8 @@ const proveedoresDePrueba = [
     categoria: 'construcción' as const,
     contactoNombre: 'Mariana Torres Quiroga',
     telefono: '+52 55 5614 2290',
-    emailContacto: 'compras@cementosdelvalle.com.mx'
+    emailContacto: 'compras@cementosdelvalle.com.mx',
+    usuarioCreacion: USUARIO_SEED
   },
   {
     razonSocial: 'Distribuidora Comercial Altamira S.A. de C.V.',
@@ -33,7 +39,8 @@ const proveedoresDePrueba = [
     categoria: 'general' as const,
     contactoNombre: 'Jorge Esteban Ruiz',
     telefono: '+52 55 5382 7741',
-    emailContacto: 'ventas@dcaltamira.com.mx'
+    emailContacto: 'ventas@dcaltamira.com.mx',
+    usuarioCreacion: USUARIO_SEED
   },
   {
     razonSocial: 'Suministros Industriales Norteños S. de R.L. de C.V.',
@@ -41,7 +48,8 @@ const proveedoresDePrueba = [
     categoria: 'general' as const,
     contactoNombre: 'Lucía Fernández Ibarra',
     telefono: '+52 81 8345 1167',
-    emailContacto: 'contacto@sumnortenos.com.mx'
+    emailContacto: 'contacto@sumnortenos.com.mx',
+    usuarioCreacion: USUARIO_SEED
   }
 ];
 
@@ -131,7 +139,8 @@ const sembrar = async (): Promise<void> => {
     duracionEstimadaMinutos: DURACION_BLOQUEADOR_MINUTOS,
     inicioVentana: ventana.inicio,
     finVentana: ventana.fin,
-    estado: 'PROGRAMADO'
+    estado: 'PROGRAMADO',
+    usuarioCreacion: USUARIO_SEED
   });
 
   const dia = ventana.inicio.toLocaleDateString('es-MX', {

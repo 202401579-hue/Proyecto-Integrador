@@ -1,5 +1,6 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import { CATEGORIAS_PROVEEDOR, normalizarNFC } from './Proveedor';
+import { CamposAuditoria, camposAuditoria, opcionesAuditoria } from './auditoria';
 
 /**
  * Estados posibles de un pedido. Por ahora el Sprint 1 solo crea pedidos
@@ -19,7 +20,7 @@ export const TIPOS_PRODUCTO = CATEGORIAS_PROVEEDOR;
 
 export type TipoProducto = (typeof TIPOS_PRODUCTO)[number];
 
-export interface IPedido extends Document {
+export interface IPedido extends Document, CamposAuditoria {
   numeroPedido: string;
   proveedorId: Types.ObjectId;
   tipoProducto: TipoProducto;
@@ -79,9 +80,11 @@ const PedidoSchema = new Schema<IPedido>(
       type: String,
       enum: [...ESTADOS_PEDIDO],
       default: 'PROGRAMADO'
-    }
+    },
+    // activo, usuarioCreacion y usuarioActualizacion (ver models/auditoria.ts)
+    ...camposAuditoria()
   },
-  { timestamps: true }
+  opcionesAuditoria
 );
 
 /**

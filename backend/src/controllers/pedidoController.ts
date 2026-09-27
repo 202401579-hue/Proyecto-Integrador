@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Pedido, { IPedido, TIPOS_PRODUCTO, TipoProducto } from '../models/Pedido';
 import Proveedor, { normalizarNFC } from '../models/Proveedor';
+import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import {
   HORARIO_OPERATIVO,
   VentanaHoraria,
@@ -168,6 +169,10 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    // Auditoria: se resuelve ANTES de entrar a la cola. Es una consulta a la
+    // base, y adentro de la cola demoraria el turno de las otras altas.
+    const usuarioCreacion = await nombreDelUsuario(req);
+
     // 4c y 5. Revisar el solapamiento y guardar van juntos dentro de la cola,
     // para que otra alta no se meta entre la consulta y el guardado.
     const resultado = await ejecutarEnSerie(async (): Promise<ResultadoAlta> => {
@@ -219,7 +224,8 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
         duracionEstimadaMinutos: duracion,
         inicioVentana: ventana.inicio,
         finVentana: ventana.fin,
-        estado: 'PROGRAMADO'
+        estado: 'PROGRAMADO',
+        usuarioCreacion
       });
 
       return { tipo: 'creado', pedido };
