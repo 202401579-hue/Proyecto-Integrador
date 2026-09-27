@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { crearProveedor, listarProveedores } from '../controllers/proveedorController';
+import {
+  actualizarProveedor,
+  crearProveedor,
+  inactivarProveedor,
+  listarProveedores
+} from '../controllers/proveedorController';
 import { verificarToken } from '../middlewares/verificarToken';
 import { autorizarRoles } from '../middlewares/autorizarRoles';
 
@@ -14,5 +19,11 @@ router.post('/', crearProveedor);
 
 // GET /api/proveedores
 router.get('/', listarProveedores);
+
+// PUT /api/proveedores/:id
+router.put('/:id', actualizarProveedor);
+
+// DELETE /api/proveedores/:id  (borrado logico: pasa activo a false)
+router.delete('/:id', inactivarProveedor);
 
 export default router;

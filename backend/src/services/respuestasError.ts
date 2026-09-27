@@ -2,6 +2,8 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 
 /**
+ * Respuestas de error compartidas por los controladores del modulo.
+ *
  * Traduce los errores de Mongoose a respuestas de la API.
  *
  * Los tres controladores del modulo repetian el mismo bloque catch. Ademas
@@ -45,4 +47,27 @@ export const respondioErrorDeEscritura = (
   }
 
   return false;
+};
+
+/**
+ * Valida el :id de las rutas /:id antes de consultar la base.
+ *
+ * Sin este chequeo, un id con formato invalido hace que Mongoose lance un
+ * CastError y la peticion termine en un 500, cuando en realidad es un error
+ * del cliente. El tipo admite arreglos porque asi lo declara Express 5: una
+ * ruta puede repetir el mismo nombre de parametro.
+ *
+ * Devuelve true si ya respondio.
+ */
+export const respondioIdInvalido = (
+  id: string | string[] | undefined,
+  res: Response,
+  entidad: string
+): boolean => {
+  if (typeof id === 'string' && mongoose.isValidObjectId(id)) {
+    return false;
+  }
+
+  res.status(400).json({ mensaje: `El identificador ${entidad} no es válido` });
+  return true;
 };

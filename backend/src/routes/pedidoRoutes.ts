@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { crearPedido, listarPedidos } from '../controllers/pedidoController';
+import {
+  actualizarPedido,
+  cancelarPedido,
+  crearPedido,
+  inactivarPedido,
+  listarPedidos,
+  reprogramarPedido
+} from '../controllers/pedidoController';
 import { verificarToken } from '../middlewares/verificarToken';
 import { autorizarRoles } from '../middlewares/autorizarRoles';
 
@@ -14,5 +21,17 @@ router.post('/', crearPedido);
 
 // GET /api/pedidos
 router.get('/', listarPedidos);
+
+// PUT /api/pedidos/:id  (datos administrativos, no la ventana horaria)
+router.put('/:id', actualizarPedido);
+
+// PUT /api/pedidos/:id/reprogramar  (mueve la ventana y revalida la agenda)
+router.put('/:id/reprogramar', reprogramarPedido);
+
+// PUT /api/pedidos/:id/cancelar  (estado CANCELADO y activo en false)
+router.put('/:id/cancelar', cancelarPedido);
+
+// DELETE /api/pedidos/:id  (borrado logico: pasa activo a false)
+router.delete('/:id', inactivarPedido);
 
 export default router;

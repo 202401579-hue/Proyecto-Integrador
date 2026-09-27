@@ -1,28 +1,11 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
 import Parametro, { IParametro } from '../models/Parametro';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { filtroActivos } from '../services/borradoLogico';
-import { respondioErrorDeEscritura } from '../services/erroresMongoose';
+import { respondioErrorDeEscritura, respondioIdInvalido } from '../services/respuestasError';
 import { invalidarConfiguracionOperativa } from '../services/configuracionOperativa';
 
 const MENSAJE_DUPLICADO = 'Ya existe un parámetro con esa clave';
-
-/**
- * Los parametros se buscan por _id en las rutas /:id. Un id con formato
- * invalido se responde 400 y no se consulta la base: sin este chequeo,
- * findById lanzaria un CastError por un error del cliente.
- */
-// El tipo de req.params en Express 5 admite arreglos, porque una ruta puede
-// repetir el mismo nombre de parametro. Aca solo sirve un texto suelto.
-const idInvalido = (id: string | string[] | undefined, res: Response): boolean => {
-  if (typeof id === 'string' && mongoose.isValidObjectId(id)) {
-    return false;
-  }
-
-  res.status(400).json({ mensaje: 'El identificador del parámetro no es válido' });
-  return true;
-};
 
 /**
  * POST /api/parametros
@@ -87,7 +70,7 @@ export const actualizarParametro = async (req: Request, res: Response): Promise<
   try {
     const { id } = req.params;
 
-    if (idInvalido(id, res)) {
+    if (respondioIdInvalido(id, res, 'del parámetro')) {
       return;
     }
 
@@ -143,7 +126,7 @@ export const inactivarParametro = async (req: Request, res: Response): Promise<v
   try {
     const { id } = req.params;
 
-    if (idInvalido(id, res)) {
+    if (respondioIdInvalido(id, res, 'del parámetro')) {
       return;
     }
 
