@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Pedido, { IPedido, TIPOS_PRODUCTO, TipoProducto } from '../models/Pedido';
 import Proveedor, { normalizarNFC } from '../models/Proveedor';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
+import { filtroActivos } from '../services/borradoLogico';
 import {
   HORARIO_OPERATIVO,
   VentanaHoraria,
@@ -135,11 +136,15 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
     // 2. El proveedor tiene que existir. Un id con formato invalido se trata
     // igual que uno inexistente: sin este chequeo, findById lanzaria un
     // CastError y la peticion terminaria en un 500 por un error del cliente.
+    // Se pide activo: true porque un proveedor dado de baja sigue en la base:
+    // el borrado logico no lo borra, pero tampoco se le pueden programar
+    // entregas nuevas. Para el cliente es el mismo error que si no existiera.
     const proveedorExiste =
-      mongoose.isValidObjectId(proveedorId) && (await Proveedor.exists({ _id: proveedorId }));
+      mongoose.isValidObjectId(proveedorId) &&
+      (await Proveedor.exists({ _id: proveedorId, activo: true }));
 
     if (!proveedorExiste) {
-      res.status(400).json({ mensaje: 'El proveedor indicado no existe' });
+      res.status(400).json({ mensaje: 'El proveedor indicado no existe o está inactivo' });
       return;
     }
 
@@ -183,8 +188,12 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
       const finBusqueda = new Date(aperturaDelDia.getTime());
       finBusqueda.setDate(finBusqueda.getDate() + DIAS_BUSQUEDA_ALTERNATIVAS + 1);
 
+      // activo: true deja afuera los pedidos dados de baja: si un pedido se
+      // cancelo, su franja vuelve a estar libre y seria un error seguir
+      // rechazando pedidos nuevos por chocar con uno que ya no cuenta.
       const pedidosProgramados = await Pedido.find({
         estado: 'PROGRAMADO',
+        activo: true,
         inicioVentana: { $lt: finBusqueda },
         finVentana: { $gt: aperturaDelDia }
       }).select('inicioVentana finVentana');
@@ -273,12 +282,15 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
 /**
  * GET /api/pedidos
  *
- * Devuelve todos los pedidos ordenados por inicio de ventana, con los datos
- * del proveedor poblados en proveedorId en lugar de solo su id.
+ * Devuelve los pedidos ACTIVOS ordenados por inicio de ventana, con los datos
+ * del proveedor poblados en proveedorId en lugar de solo su id. Los dados de
+ * baja no salen, salvo que se pida ?incluirInactivos=true.
  */
-export const listarPedidos = async (_req: Request, res: Response): Promise<void> => {
+export const listarPedidos = async (req: Request, res: Response): Promise<void> => {
   try {
-    const pedidos = await Pedido.find().sort({ inicioVentana: 1 }).populate('proveedorId');
+    const pedidos = await Pedido.find(filtroActivos<IPedido>(req))
+      .sort({ inicioVentana: 1 })
+      .populate('proveedorId');
     res.status(200).json(pedidos);
   } catch (error) {
     console.error('[Pedidos] Error al listar:', (error as Error).message);

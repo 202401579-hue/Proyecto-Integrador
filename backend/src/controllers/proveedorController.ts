@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import Proveedor from '../models/Proveedor';
+import Proveedor, { IProveedor } from '../models/Proveedor';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
+import { filtroActivos } from '../services/borradoLogico';
 
 /**
  * POST /api/proveedores
@@ -68,11 +69,14 @@ export const crearProveedor = async (req: Request, res: Response): Promise<void>
 /**
  * GET /api/proveedores
  *
- * Devuelve todos los proveedores ordenados por razon social.
+ * Devuelve los proveedores ACTIVOS, ordenados por razon social. Los dados
+ * de baja no salen, salvo que se pida ?incluirInactivos=true.
  */
-export const listarProveedores = async (_req: Request, res: Response): Promise<void> => {
+export const listarProveedores = async (req: Request, res: Response): Promise<void> => {
   try {
-    const proveedores = await Proveedor.find().sort({ razonSocial: 1 });
+    const proveedores = await Proveedor.find(filtroActivos<IProveedor>(req)).sort({
+      razonSocial: 1
+    });
     res.status(200).json(proveedores);
   } catch (error) {
     console.error('[Proveedores] Error al listar:', (error as Error).message);

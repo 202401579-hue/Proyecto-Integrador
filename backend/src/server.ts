@@ -5,6 +5,7 @@ import { conectarDB } from './config/database';
 import authRoutes from './routes/authRoutes';
 import proveedorRoutes from './routes/proveedorRoutes';
 import pedidoRoutes from './routes/pedidoRoutes';
+import parametroRoutes from './routes/parametroRoutes';
 
 // Carga las variables de entorno antes que cualquier otra cosa,
 // porque la conexion a Mongo y la firma del JWT dependen de ellas.
@@ -29,6 +30,9 @@ app.use('/api/proveedores', proveedorRoutes);
 
 // Rutas del modulo de programacion de pedidos (rol Coordinador)
 app.use('/api/pedidos', pedidoRoutes);
+
+// Rutas de parametros de configuracion (escritura del Administrador)
+app.use('/api/parametros', parametroRoutes);
 
 // Ruta de verificacion: sirve para comprobar que el servidor esta arriba.
 app.get('/api/health', (_req: Request, res: Response) => {

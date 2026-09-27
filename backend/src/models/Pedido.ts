@@ -101,8 +101,10 @@ PedidoSchema.pre<IPedido>('validate', function () {
   }
 });
 
-// Las busquedas de solapamiento filtran por estado y rango de inicio;
-// el indice evita recorrer toda la coleccion en cada alta de pedido.
-PedidoSchema.index({ estado: 1, inicioVentana: 1 });
+// Las busquedas de solapamiento filtran por activo, estado y rango de inicio;
+// el indice evita recorrer toda la coleccion en cada alta de pedido. El orden
+// de los campos sigue al de la consulta: primero los de igualdad, al final
+// el del rango, que es como MongoDB puede aprovechar el indice completo.
+PedidoSchema.index({ activo: 1, estado: 1, inicioVentana: 1 });
 
 export default mongoose.model<IPedido>('Pedido', PedidoSchema);
