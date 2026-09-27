@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes';
 import proveedorRoutes from './routes/proveedorRoutes';
 import pedidoRoutes from './routes/pedidoRoutes';
 import parametroRoutes from './routes/parametroRoutes';
+import llegadaRoutes from './routes/llegadaRoutes';
 
 // Carga las variables de entorno antes que cualquier otra cosa,
 // porque la conexion a Mongo y la firma del JWT dependen de ellas.
@@ -33,6 +34,9 @@ app.use('/api/pedidos', pedidoRoutes);
 
 // Rutas de parametros de configuracion (escritura del Administrador)
 app.use('/api/parametros', parametroRoutes);
+
+// Rutas del control de arribos (HU-02)
+app.use('/api/llegadas', llegadaRoutes);
 
 // Ruta de verificacion: sirve para comprobar que el servidor esta arriba.
 app.get('/api/health', (_req: Request, res: Response) => {

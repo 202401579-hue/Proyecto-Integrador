@@ -1,5 +1,6 @@
 import Parametro from '../models/Parametro';
 import { HorarioOperativo } from './ventanaHoraria';
+import { Tolerancias } from './puntualidad';
 
 /**
  * Lee de la coleccion parametros la configuracion de operacion: el horario
@@ -23,15 +24,6 @@ export const CLAVES_PARAMETROS = {
   toleranciaTardioMinutos: 'TOLERANCIA_TARDIO_MINUTOS',
   toleranciaAusenteMinutos: 'TOLERANCIA_AUSENTE_MINUTOS'
 } as const;
-
-export interface Tolerancias {
-  /** Minutos antes del inicio a partir de los cuales la llegada es ANTICIPADO. */
-  anticipadoMinutos: number;
-  /** Minutos despues del inicio que todavia se consideran A TIEMPO. */
-  tardioMinutos: number;
-  /** Minutos despues del inicio a partir de los cuales el pedido es AUSENTE. */
-  ausenteMinutos: number;
-}
 
 export interface ConfiguracionOperativa {
   horario: HorarioOperativo;

@@ -23,6 +23,7 @@ import {
   textoHorario
 } from '../services/ventanaHoraria';
 import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
+import { marcarPedidosAusentes } from '../services/controlAusencias';
 
 // Cantidad de ventanas libres que se ofrecen cuando hay solapamiento,
 // y hasta cuantos dias hacia adelante se buscan.
@@ -354,6 +355,13 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
  */
 export const listarPedidos = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Antes de listar se cierran los pedidos vencidos que nunca registraron
+    // llegada: nadie dispara el estado AUSENTE, es la falta de un evento.
+    // Ver services/controlAusencias.ts para por que se hace aca y no con un
+    // proceso aparte.
+    const { tolerancias } = await obtenerConfiguracionOperativa();
+    await marcarPedidosAusentes(tolerancias);
+
     const pedidos = await Pedido.find(filtroActivos<IPedido>(req))
       .sort({ inicioVentana: 1 })
       .populate('proveedorId');
