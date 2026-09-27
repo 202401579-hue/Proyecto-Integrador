@@ -3,7 +3,8 @@ import dotenv from 'dotenv';
 import { conectarDB } from '../config/database';
 import Proveedor from '../models/Proveedor';
 import Pedido from '../models/Pedido';
-import { calcularVentana } from '../services/ventanaHoraria';
+import { HorarioOperativo, calcularVentana, esDiaHabil } from '../services/ventanaHoraria';
+import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
 
 dotenv.config();
 
@@ -62,20 +63,25 @@ const DURACION_BLOQUEADOR_MINUTOS = 60;
 const NUMERO_PEDIDO_BLOQUEADOR = 'OC-2026-0001';
 
 /**
- * Devuelve el proximo dia habil a partir de manana, a las `hora`:00 en la
- * hora local del servidor. Sabado y domingo se saltean (viernes -> lunes).
+ * Devuelve el proximo dia de atencion a partir de manana, a las `hora`:00 en
+ * la hora local del servidor.
+ *
+ * Los dias habiles salen de la coleccion parametros, no de una regla fija:
+ * con el horario confirmado (lunes a sabado) solo se saltea el domingo, pero
+ * si manana el negocio deja de atender los sabados, este seed acompana el
+ * cambio sin que haya que tocarlo.
  *
  * Se calcula al correr el script y no se escribe fijo en el codigo: el
  * backend rechaza fechas pasadas, asi que una fecha fija dejaria la demo
  * inservible al dia siguiente.
  */
-const proximoDiaHabil = (hora: number): Date => {
+const proximoDiaHabil = (hora: number, horario: HorarioOperativo): Date => {
   const fecha = new Date();
   fecha.setHours(hora, 0, 0, 0);
 
   do {
     fecha.setDate(fecha.getDate() + 1);
-  } while (fecha.getDay() === 0 || fecha.getDay() === 6); // 0 = domingo, 6 = sabado
+  } while (!esDiaHabil(fecha, horario));
 
   return fecha;
 };
@@ -106,6 +112,10 @@ const horaCorta = (fecha: Date): string =>
 const sembrar = async (): Promise<void> => {
   await conectarDB();
 
+  // El horario operativo vive en la coleccion parametros (npm run seed:parametros).
+  // Si falta, la configuracion cae en sus valores por defecto y avisa por consola.
+  const { horario } = await obtenerConfiguracionOperativa();
+
   // Se borran los pedidos antes que los proveedores para no dejar, ni por
   // un instante, pedidos apuntando a proveedores que ya no existen.
   const pedidosBorrados = await Pedido.deleteMany({});
@@ -127,7 +137,7 @@ const sembrar = async (): Promise<void> => {
   // El bloqueador va asociado al proveedor de construccion.
   const proveedorBloqueador = proveedores[0];
   const ventana = calcularVentana(
-    proximoDiaHabil(HORA_BLOQUEADOR),
+    proximoDiaHabil(HORA_BLOQUEADOR, horario),
     DURACION_BLOQUEADOR_MINUTOS
   );
 

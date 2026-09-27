@@ -3,13 +3,42 @@ import { CATEGORIAS_PROVEEDOR, normalizarNFC } from './Proveedor';
 import { CamposAuditoria, camposAuditoria, opcionesAuditoria } from './auditoria';
 
 /**
- * Estados posibles de un pedido. Por ahora el Sprint 1 solo crea pedidos
- * programados; el arreglo queda listo para sumar estados en sprints futuros
- * sin tocar el resto del esquema.
+ * Estados posibles de un pedido.
+ *
+ * El pedido nace PROGRAMADO. Cuando el camion llega, el control de arribos
+ * lo reclasifica segun la puntualidad (ANTICIPADO, A TIEMPO o TARDIO); si
+ * nunca llega y se pasa del limite, queda AUSENTE. CANCELADO es el unico
+ * que decide una persona.
+ *
+ * Los textos son los del enunciado y se escriben tal cual: "A TIEMPO" lleva
+ * espacio y "TARDÍO" lleva tilde. El frontend compara el texto exacto.
  */
-export const ESTADOS_PEDIDO = ['PROGRAMADO'] as const;
+export const ESTADOS_PEDIDO = [
+  'PROGRAMADO',
+  'ANTICIPADO',
+  'A TIEMPO',
+  'TARDÍO',
+  'AUSENTE',
+  'CANCELADO'
+] as const;
 
 export type EstadoPedido = (typeof ESTADOS_PEDIDO)[number];
+
+/**
+ * Estados que siguen ocupando la franja horaria del deposito.
+ *
+ * Es la lista que usa el control de solapamiento. Antes alcanzaba con
+ * comparar contra PROGRAMADO, pero ahora un pedido que ya llego cambia de
+ * estado: si se siguiera filtrando solo por PROGRAMADO, su franja quedaria
+ * "libre" y se podria programar otra entrega encima de un camion que esta
+ * descargando en ese momento.
+ *
+ * Quedan afuera CANCELADO (la entrega no va a ocurrir) y AUSENTE (el camion
+ * nunca aparecio), porque en esos dos casos el anden vuelve a estar libre.
+ */
+export const ESTADOS_QUE_OCUPAN_FRANJA = ESTADOS_PEDIDO.filter(
+  (estado) => estado !== 'CANCELADO' && estado !== 'AUSENTE'
+);
 
 /**
  * Tipos de producto admitidos. Segun el enunciado es la misma lista cerrada
@@ -29,6 +58,12 @@ export interface IPedido extends Document, CamposAuditoria {
   inicioVentana: Date;
   finVentana: Date;
   estado: EstadoPedido;
+  /**
+   * Momento en que el camion se presento realmente. Lo escribe el control de
+   * arribos con la hora del servidor, no el cliente. Queda vacio mientras el
+   * pedido no registre llegada.
+   */
+  fechaHoraLlegadaReal?: Date;
 }
 
 const PedidoSchema = new Schema<IPedido>(
@@ -78,8 +113,19 @@ const PedidoSchema = new Schema<IPedido>(
     },
     estado: {
       type: String,
-      enum: [...ESTADOS_PEDIDO],
+      // Se normaliza la tilde de TARDÍO igual que en categoria y tipoProducto:
+      // la "Í" puede llegar como un caracter o como "I" + tilde combinable.
+      set: normalizarNFC,
+      enum: {
+        values: [...ESTADOS_PEDIDO],
+        message: `El estado debe ser uno de: ${ESTADOS_PEDIDO.join(', ')}`
+      },
       default: 'PROGRAMADO'
+    },
+    // La llegada real no se pide en el alta: el pedido se programa antes de
+    // que el camion exista, y la hora la pone el servidor al registrarla.
+    fechaHoraLlegadaReal: {
+      type: Date
     },
     // activo, usuarioCreacion y usuarioActualizacion (ver models/auditoria.ts)
     ...camposAuditoria()

@@ -4,6 +4,7 @@ import Parametro, { IParametro } from '../models/Parametro';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { filtroActivos } from '../services/borradoLogico';
 import { respondioErrorDeEscritura } from '../services/erroresMongoose';
+import { invalidarConfiguracionOperativa } from '../services/configuracionOperativa';
 
 const MENSAJE_DUPLICADO = 'Ya existe un parámetro con esa clave';
 
@@ -40,6 +41,10 @@ export const crearParametro = async (req: Request, res: Response): Promise<void>
       descripcion,
       usuarioCreacion: await nombreDelUsuario(req)
     });
+
+    // El horario y las tolerancias se cachean unos segundos: al escribir un
+    // parametro se borra el cache para que el cambio se aplique en el acto.
+    invalidarConfiguracionOperativa();
 
     res.status(201).json(parametro);
   } catch (error) {
@@ -115,6 +120,7 @@ export const actualizarParametro = async (req: Request, res: Response): Promise<
     parametro.usuarioActualizacion = await nombreDelUsuario(req);
 
     await parametro.save();
+    invalidarConfiguracionOperativa();
 
     res.status(200).json(parametro);
   } catch (error) {
@@ -154,6 +160,7 @@ export const inactivarParametro = async (req: Request, res: Response): Promise<v
     parametro.usuarioActualizacion = await nombreDelUsuario(req);
 
     await parametro.save();
+    invalidarConfiguracionOperativa();
 
     res.status(200).json({ mensaje: 'Parámetro inactivado', parametro });
   } catch (error) {

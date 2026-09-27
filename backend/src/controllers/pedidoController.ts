@@ -1,28 +1,31 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import Pedido, { IPedido, TIPOS_PRODUCTO, TipoProducto } from '../models/Pedido';
+import Pedido, {
+  ESTADOS_QUE_OCUPAN_FRANJA,
+  IPedido,
+  TIPOS_PRODUCTO,
+  TipoProducto
+} from '../models/Pedido';
 import Proveedor, { normalizarNFC } from '../models/Proveedor';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { filtroActivos } from '../services/borradoLogico';
 import {
-  HORARIO_OPERATIVO,
   VentanaHoraria,
   buscarAlternativas,
   calcularVentana,
+  esDiaHabil,
   estaDentroDelHorario,
   limitesDelDia,
-  seSolapan
+  seSolapan,
+  textoDiasHabiles,
+  textoHorario
 } from '../services/ventanaHoraria';
+import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
 
 // Cantidad de ventanas libres que se ofrecen cuando hay solapamiento,
 // y hasta cuantos dias hacia adelante se buscan.
 const CANTIDAD_ALTERNATIVAS = 3;
 const DIAS_BUSQUEDA_ALTERNATIVAS = 7;
-
-const dosDigitos = (n: number): string => String(n).padStart(2, '0');
-const TEXTO_HORARIO = `${dosDigitos(HORARIO_OPERATIVO.horaApertura)}:00 a ${dosDigitos(
-  HORARIO_OPERATIVO.horaCierre
-)}:00`;
 
 /**
  * Cola de altas de pedidos: cada alta espera a que termine la anterior.
@@ -63,7 +66,7 @@ type ResultadoAlta =
  *      que el numeroPedido no este repetido             -> 400
  *   3. calcular la ventana
  *   4. que no sea una fecha pasada                      -> 400
- *      horario operativo                                -> 400
+ *      dia habil y horario operativo                    -> 400
  *      solapamiento con los pedidos programados del dia -> 409 + alternativas
  *   5. guardar                                          -> 201
  */
@@ -156,6 +159,10 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    // El horario operativo y los dias de atencion salen de la coleccion
+    // parametros, no de una constante: el negocio los cambia sin desplegar.
+    const { horario } = await obtenerConfiguracionOperativa();
+
     // 3. La ventana la calcula el backend, nunca se toma del cliente.
     const ventana = calcularVentana(inicio, duracion);
 
@@ -166,10 +173,23 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // 4b. La ventana completa tiene que entrar en el horario operativo.
-    if (!estaDentroDelHorario(ventana)) {
+    // 4b. El deposito no atiende todos los dias. Se responde antes que el
+    // horario para que el mensaje explique el problema real: decirle "fuera
+    // del horario 07:00 a 17:00" a quien programo un domingo a las 09:00
+    // lo dejaria mirando el reloj en lugar del calendario.
+    if (!esDiaHabil(ventana.inicio, horario)) {
       res.status(400).json({
-        mensaje: `El pedido debe programarse dentro del horario operativo (${TEXTO_HORARIO})`
+        mensaje: `El pedido debe programarse en un día de atención (${textoDiasHabiles(horario)})`
+      });
+      return;
+    }
+
+    // 4c. La ventana completa tiene que entrar en el horario operativo.
+    if (!estaDentroDelHorario(ventana, horario)) {
+      res.status(400).json({
+        mensaje: `El pedido debe programarse dentro del horario operativo (${textoHorario(
+          horario
+        )})`
       });
       return;
     }
@@ -178,21 +198,21 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
     // base, y adentro de la cola demoraria el turno de las otras altas.
     const usuarioCreacion = await nombreDelUsuario(req);
 
-    // 4c y 5. Revisar el solapamiento y guardar van juntos dentro de la cola,
+    // 4d y 5. Revisar el solapamiento y guardar van juntos dentro de la cola,
     // para que otra alta no se meta entre la consulta y el guardado.
     const resultado = await ejecutarEnSerie(async (): Promise<ResultadoAlta> => {
       // Se traen de una vez los pedidos programados desde el dia pedido hasta el
       // ultimo dia en que se buscarian alternativas. Los del mismo dia se usan
       // para detectar el solape; el resto, solo si hace falta ofrecer alternativas.
-      const { inicio: aperturaDelDia } = limitesDelDia(ventana.inicio);
+      const { inicio: aperturaDelDia } = limitesDelDia(ventana.inicio, horario);
       const finBusqueda = new Date(aperturaDelDia.getTime());
       finBusqueda.setDate(finBusqueda.getDate() + DIAS_BUSQUEDA_ALTERNATIVAS + 1);
 
-      // activo: true deja afuera los pedidos dados de baja: si un pedido se
-      // cancelo, su franja vuelve a estar libre y seria un error seguir
-      // rechazando pedidos nuevos por chocar con uno que ya no cuenta.
+      // Se filtra por los estados que todavia ocupan la franja (ver el modelo):
+      // un pedido cancelado o ausente libera su horario. Lo mismo activo: true,
+      // que deja afuera los dados de baja.
       const pedidosProgramados = await Pedido.find({
-        estado: 'PROGRAMADO',
+        estado: { $in: ESTADOS_QUE_OCUPAN_FRANJA },
         activo: true,
         inicioVentana: { $lt: finBusqueda },
         finVentana: { $gt: aperturaDelDia }
@@ -213,6 +233,7 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
           desde,
           duracion,
           ocupadas,
+          horario,
           CANTIDAD_ALTERNATIVAS,
           DIAS_BUSQUEDA_ALTERNATIVAS
         ).map((alternativa) => ({
