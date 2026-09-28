@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Script from "next/script";
 import { obtenerRutaPorRol, sesionDesdeToken } from "@/lib/session";
 import NavbarPrivado from "@/components/NavbarPrivado";
+import Sidebar from "@/components/Sidebar";
 import { SesionProvider } from "@/components/SesionProvider";
 
 function suscribirseAlToken(avisar: () => void) {
@@ -25,8 +26,6 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
   const sesion = sesionDesdeToken(token);
   const rutaDelRol = sesion ? obtenerRutaPorRol(sesion.rol) : null;
 
-  // Permite la ruta exacta del rol y cualquier subruta debajo de ella,
-  // por ejemplo /coordinador/proveedores o /coordinador/pedidos.
   const dentroDeSuSeccion =
     !!rutaDelRol && (pathname === rutaDelRol || pathname.startsWith(`${rutaDelRol}/`));
 
@@ -36,7 +35,6 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
     if (!rutaDelRol) {
       router.replace("/login");
     } else if (!dentroDeSuSeccion) {
-      // Cada rol solo puede estar dentro de su propia seccion.
       router.replace(rutaDelRol);
     }
   }, [montado, rutaDelRol, dentroDeSuSeccion, router]);
@@ -57,12 +55,26 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
 
   return (
     <SesionProvider sesion={sesion}>
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+      />
       <Script
         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         strategy="afterInteractive"
       />
-      <NavbarPrivado rol={sesion.rol} />
-      <main className="container py-4">{children}</main>
+      <div className="d-flex" style={{ minHeight: "100vh" }}>
+        <Sidebar rol={sesion.rol} />
+        <div className="flex-grow-1 d-flex flex-column">
+          <NavbarPrivado rol={sesion.rol} />
+          <main
+            className="container-fluid py-4 flex-grow-1"
+            style={{ backgroundColor: "#f8f9fc" }}
+          >
+            {children}
+          </main>
+        </div>
+      </div>
     </SesionProvider>
   );
 }

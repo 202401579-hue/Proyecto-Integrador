@@ -3,25 +3,19 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { obtenerToken } from '@/lib/session';
 
-interface Proveedor {
+interface Parametro {
   _id: string;
-  razonSocial: string;
-  identificacionTributaria: string;
-  categoria: string;
-  contactoNombre: string;
-  telefono: string;
-  emailContacto: string;
+  clave: string;
+  valor: string;
+  descripcion: string;
   activo: boolean;
   usuarioActualizacion?: string;
 }
 
-export default function ProveedoresPage() {
-  const [razonSocial, setRazonSocial] = useState('');
-  const [identificacionTributaria, setIdentificacionTributaria] = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [contactoNombre, setContactoNombre] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [emailContacto, setEmailContacto] = useState('');
+export default function ParametrosPage() {
+  const [clave, setClave] = useState('');
+  const [valor, setValor] = useState('');
+  const [descripcion, setDescripcion] = useState('');
 
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
@@ -29,69 +23,61 @@ export default function ProveedoresPage() {
 
   const [idEditando, setIdEditando] = useState<string | null>(null);
 
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [parametros, setParametros] = useState<Parametro[]>([]);
   const [cargandoLista, setCargandoLista] = useState(false);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
-  const [advertencia, setAdvertencia] = useState('');
 
-  const cargarProveedores = async () => {
+  const cargarParametros = async () => {
     setCargandoLista(true);
     try {
       const token = obtenerToken();
       const query = mostrarInactivos ? '?incluirInactivos=true' : '';
       const respuesta = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/proveedores${query}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/parametros${query}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const datos = await respuesta.json();
-      setProveedores(Array.isArray(datos) ? datos : []);
+      setParametros(Array.isArray(datos) ? datos : []);
     } catch {
-      setProveedores([]);
+      setParametros([]);
     } finally {
       setCargandoLista(false);
     }
   };
 
   useEffect(() => {
-    cargarProveedores();
+    cargarParametros();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mostrarInactivos]);
 
   const limpiarFormulario = () => {
-    setRazonSocial('');
-    setIdentificacionTributaria('');
-    setCategoria('');
-    setContactoNombre('');
-    setTelefono('');
-    setEmailContacto('');
+    setClave('');
+    setValor('');
+    setDescripcion('');
     setIdEditando(null);
   };
 
-  const iniciarEdicion = (proveedor: Proveedor) => {
+  const iniciarEdicion = (parametro: Parametro) => {
     setError('');
     setExito('');
-    setRazonSocial(proveedor.razonSocial);
-    setIdentificacionTributaria(proveedor.identificacionTributaria);
-    setCategoria(proveedor.categoria);
-    setContactoNombre(proveedor.contactoNombre);
-    setTelefono(proveedor.telefono);
-    setEmailContacto(proveedor.emailContacto);
-    setIdEditando(proveedor._id);
+    setClave(parametro.clave);
+    setValor(parametro.valor);
+    setDescripcion(parametro.descripcion);
+    setIdEditando(parametro._id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const inactivarProveedor = async (proveedor: Proveedor) => {
+  const inactivarParametro = async (parametro: Parametro) => {
     const confirmar = window.confirm(
-      `¿Inactivar a "${proveedor.razonSocial}"? Podrás seguir viéndolo con el filtro de inactivos.`
+      `¿Inactivar el parámetro "${parametro.clave}"? El backend seguirá funcionando con su valor por defecto.`
     );
     if (!confirmar) return;
 
     setError('');
-    setAdvertencia('');
     try {
       const token = obtenerToken();
       const respuesta = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/proveedores/${proveedor._id}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/parametros/${parametro._id}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
@@ -103,10 +89,7 @@ export default function ProveedoresPage() {
         setError(datos.mensaje);
         return;
       }
-      if (datos.advertencia) {
-        setAdvertencia(datos.advertencia);
-      }
-      cargarProveedores();
+      cargarParametros();
     } catch {
       setError('No se pudo conectar con el servidor');
     }
@@ -116,13 +99,12 @@ export default function ProveedoresPage() {
     e.preventDefault();
     setError('');
     setExito('');
-    setAdvertencia('');
     setCargando(true);
 
     const editando = idEditando !== null;
     const url = editando
-      ? `${process.env.NEXT_PUBLIC_API_URL}/api/proveedores/${idEditando}`
-      : `${process.env.NEXT_PUBLIC_API_URL}/api/proveedores`;
+      ? `${process.env.NEXT_PUBLIC_API_URL}/api/parametros/${idEditando}`
+      : `${process.env.NEXT_PUBLIC_API_URL}/api/parametros`;
 
     try {
       const token = obtenerToken();
@@ -133,12 +115,9 @@ export default function ProveedoresPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          razonSocial,
-          identificacionTributaria,
-          categoria,
-          contactoNombre,
-          telefono,
-          emailContacto,
+          clave,
+          valor: String(valor),
+          descripcion,
         }),
       });
 
@@ -149,10 +128,10 @@ export default function ProveedoresPage() {
         return;
       }
 
-      setExito(editando ? 'Proveedor actualizado correctamente.' : 'Proveedor registrado correctamente.');
+      setExito(editando ? 'Parámetro actualizado correctamente.' : 'Parámetro creado correctamente.');
       limpiarFormulario();
-      cargarProveedores();
-    } catch (err) {
+      cargarParametros();
+    } catch {
       setError('No se pudo conectar con el servidor');
     } finally {
       setCargando(false);
@@ -162,106 +141,64 @@ export default function ProveedoresPage() {
   return (
     <div>
       <h2 className="h4 mb-4 d-flex align-items-center gap-2">
-        <i className="bi bi-building text-primary" />
-        Proveedores
+        <i className="bi bi-sliders text-primary" />
+        Parámetros
       </h2>
 
       <div className="card shadow-sm mb-4">
         <div className="card-header bg-white py-3">
           <h6 className="m-0 fw-bold text-primary">
-            {idEditando ? 'Editar proveedor' : 'Registrar proveedor'}
+            {idEditando ? 'Editar parámetro' : 'Nuevo parámetro'}
           </h6>
         </div>
         <div className="card-body">
           <form onSubmit={manejarEnvio}>
             <div className="row g-3">
-              <div className="col-md-6">
-                <label htmlFor="razonSocial" className="form-label">Razón social</label>
+              <div className="col-md-4">
+                <label htmlFor="clave" className="form-label">Clave</label>
                 <input
-                  id="razonSocial"
+                  id="clave"
                   type="text"
                   className="form-control"
-                  value={razonSocial}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setRazonSocial(e.target.value)}
+                  value={clave}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setClave(e.target.value)}
+                  disabled={idEditando !== null}
                   required
                 />
               </div>
 
-              <div className="col-md-6">
-                <label htmlFor="identificacionTributaria" className="form-label">Identificación tributaria (NIT)</label>
+              <div className="col-md-3">
+                <label htmlFor="valor" className="form-label">Valor</label>
                 <input
-                  id="identificacionTributaria"
+                  id="valor"
                   type="text"
                   className="form-control"
-                  value={identificacionTributaria}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setIdentificacionTributaria(e.target.value)}
+                  value={valor}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setValor(e.target.value)}
                   required
                 />
+                <div className="form-text">Siempre como texto (ej. "17").</div>
               </div>
 
-              <div className="col-md-6">
-                <label htmlFor="categoria" className="form-label">Categoría</label>
-                <select
-                  id="categoria"
-                  className="form-select"
-                  value={categoria}
-                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setCategoria(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Selecciona una categoría</option>
-                  <option value="construcción">construcción</option>
-                  <option value="general">general</option>
-                </select>
-              </div>
-
-              <div className="col-md-6">
-                <label htmlFor="contactoNombre" className="form-label">Nombre de contacto</label>
+              <div className="col-md-5">
+                <label htmlFor="descripcion" className="form-label">Descripción</label>
                 <input
-                  id="contactoNombre"
+                  id="descripcion"
                   type="text"
                   className="form-control"
-                  value={contactoNombre}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setContactoNombre(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="col-md-6">
-                <label htmlFor="telefono" className="form-label">Teléfono</label>
-                <input
-                  id="telefono"
-                  type="text"
-                  className="form-control"
-                  value={telefono}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setTelefono(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="col-md-6">
-                <label htmlFor="emailContacto" className="form-label">Correo de contacto</label>
-                <input
-                  id="emailContacto"
-                  type="email"
-                  className="form-control"
-                  value={emailContacto}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEmailContacto(e.target.value)}
+                  value={descripcion}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setDescripcion(e.target.value)}
                   required
                 />
               </div>
             </div>
 
             {error && <div className="alert alert-danger py-2 mt-3">{error}</div>}
-            {advertencia && <div className="alert alert-warning py-2 mt-3">{advertencia}</div>}
             {exito && <div className="alert alert-success py-2 mt-3">{exito}</div>}
 
             <div className="d-flex gap-2 mt-3">
               <button type="submit" className="btn btn-primary px-4" disabled={cargando}>
-                {cargando
-                  ? 'Guardando...'
-                  : idEditando
-                  ? 'Guardar cambios'
-                  : 'Registrar proveedor'}
+                {cargando ? 'Guardando...' : idEditando ? 'Guardar cambios' : 'Crear parámetro'}
               </button>
               {idEditando && (
                 <button
@@ -280,7 +217,7 @@ export default function ProveedoresPage() {
 
       <div className="card shadow-sm">
         <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-          <h6 className="m-0 fw-bold text-primary">Listado de proveedores</h6>
+          <h6 className="m-0 fw-bold text-primary">Listado de parámetros</h6>
           <div className="form-check form-switch mb-0">
             <input
               className="form-check-input"
@@ -302,21 +239,21 @@ export default function ProveedoresPage() {
               <table className="table table-hover align-middle mb-0">
                 <thead>
                   <tr>
-                    <th>Razón social</th>
-                    <th>NIT</th>
-                    <th>Categoría</th>
-                    <th>Contacto</th>
+                    <th>Clave</th>
+                    <th>Valor</th>
+                    <th>Descripción</th>
+                    <th>Modificado por</th>
                     <th>Estado</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {proveedores.map((p) => (
+                  {parametros.map((p) => (
                     <tr key={p._id} className={!p.activo ? 'table-secondary' : ''}>
-                      <td>{p.razonSocial}</td>
-                      <td>{p.identificacionTributaria}</td>
-                      <td>{p.categoria}</td>
-                      <td>{p.contactoNombre}</td>
+                      <td>{p.clave}</td>
+                      <td>{p.valor}</td>
+                      <td>{p.descripcion}</td>
+                      <td>{p.usuarioActualizacion ?? '—'}</td>
                       <td>
                         {p.activo ? (
                           <span className="badge bg-success">Activo</span>
@@ -336,7 +273,7 @@ export default function ProveedoresPage() {
                         <button
                           type="button"
                           className="btn btn-sm btn-outline-danger"
-                          onClick={() => inactivarProveedor(p)}
+                          onClick={() => inactivarParametro(p)}
                           disabled={!p.activo}
                         >
                           Inactivar
@@ -344,10 +281,10 @@ export default function ProveedoresPage() {
                       </td>
                     </tr>
                   ))}
-                  {proveedores.length === 0 && (
+                  {parametros.length === 0 && (
                     <tr>
                       <td colSpan={6} className="text-center text-muted py-3">
-                        No hay proveedores para mostrar.
+                        No hay parámetros para mostrar.
                       </td>
                     </tr>
                   )}
