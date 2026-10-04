@@ -19,7 +19,13 @@ export const ESTADOS_PEDIDO = [
   'A TIEMPO',
   'TARDÍO',
   'AUSENTE',
-  'CANCELADO'
+  'CANCELADO',
+  // Sprint 3: ciclo de descarga en el gateway. EN COLA queda en el enum
+  // porque el enunciado lo lista, aunque todavia nadie lo asigna. DESCARGANDO
+  // lo pone POST /api/descargas/iniciar y FINALIZADO, POST /api/descargas/finalizar.
+  'EN COLA',
+  'DESCARGANDO',
+  'FINALIZADO'
 ] as const;
 
 export type EstadoPedido = (typeof ESTADOS_PEDIDO)[number];
@@ -68,8 +74,8 @@ export interface IPedido extends Document, CamposAuditoria {
 
 const PedidoSchema = new Schema<IPedido>(
   {
-    // Codigo de la orden de compra. Lo escribe el coordinador en el
-    // formulario; el backend no lo genera, solo exige que no se repita.
+    // Codigo de la orden de compra. Desde el Sprint 3 se genera automaticamente
+    // en el servidor (ver services/numeroPedido.ts): el cliente ya no lo manda.
     numeroPedido: {
       type: String,
       required: [true, 'El número de pedido es obligatorio'],

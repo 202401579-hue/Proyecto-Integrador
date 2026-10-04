@@ -24,6 +24,7 @@ import {
 } from '../services/ventanaHoraria';
 import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
 import { marcarPedidosAusentes } from '../services/controlAusencias';
+import { generarNumeroPedido } from '../services/numeroPedido';
 
 // Cantidad de ventanas libres que se ofrecen cuando hay solapamiento,
 // y hasta cuantos dias hacia adelante se buscan.
@@ -33,6 +34,15 @@ const DIAS_BUSQUEDA_ALTERNATIVAS = 7;
 const MENSAJE_DUPLICADO = 'Ya existe un pedido con ese número de pedido';
 const MENSAJE_NO_ENCONTRADO = 'El pedido indicado no existe o está inactivo';
 const MENSAJE_SOLAPE = 'La ventana horaria se solapa con otro pedido ya programado';
+
+/**
+ * Estados del ciclo de descarga (Sprint 3): mientras el pedido esta en uno
+ * de estos, no se edita ni se inactiva. Editar un pedido EN COLA o
+ * DESCARGANDO podria pisar datos que la descarga esta usando, e inactivar
+ * uno DESCARGANDO dejaria su gateway OCUPADO para siempre, sin manera de
+ * finalizarlo.
+ */
+const ESTADOS_BLOQUEADOS_EDICION = ['EN COLA', 'DESCARGANDO', 'FINALIZADO'];
 
 /**
  * Cola de altas de pedidos: cada alta espera a que termine la anterior.
@@ -191,7 +201,6 @@ const respondioVentanaInvalida = (
 export const crearPedido = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
-      numeroPedido,
       proveedorId,
       tipoProducto,
       fechaHoraProgramada,
@@ -200,8 +209,8 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
 
     // 1. Campos obligatorios. Se compara contra undefined/null/'' y no con !valor,
     // porque !0 es true y una duracion 0 tiene que caer en el mensaje de formato.
+    // numeroPedido ya no esta aca: se genera en el servidor, no lo manda el cliente.
     const faltaCampo = [
-      numeroPedido,
       proveedorId,
       tipoProducto,
       fechaHoraProgramada,
@@ -211,19 +220,10 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
     if (faltaCampo) {
       res.status(400).json({
         mensaje:
-          'numeroPedido, proveedorId, tipoProducto, fechaHoraProgramada y duracionEstimadaMinutos son obligatorios'
+          'proveedorId, tipoProducto, fechaHoraProgramada y duracionEstimadaMinutos son obligatorios'
       });
       return;
     }
-
-    // Es un codigo que escribe el coordinador: se exige texto para que un
-    // objeto o un arreglo no terminen guardados como "[object Object]".
-    if (typeof numeroPedido !== 'string') {
-      res.status(400).json({ mensaje: 'numeroPedido debe ser un texto' });
-      return;
-    }
-
-    const numero = numeroPedido.trim();
 
     // Lista cerrada, igual que la categoria del proveedor. Se normaliza la
     // tilde antes de comparar (ver normalizarNFC en el modelo Proveedor).
@@ -269,17 +269,10 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // El numero de pedido es el codigo de la orden de compra: no se puede
-    // repetir. El indice unico del modelo es la garantia final (ver el catch);
-    // este chequeo previo permite responder antes de calcular la ventana.
-    if (await Pedido.exists({ numeroPedido: numero })) {
-      res.status(400).json({ mensaje: `Ya existe un pedido con el número ${numero}` });
-      return;
-    }
-
-    // El horario operativo y los dias de atencion salen de la coleccion
-    // parametros, no de una constante: el negocio los cambia sin desplegar.
-    const { horario } = await obtenerConfiguracionOperativa();
+    // El horario operativo, los dias de atencion y el prefijo del numero de
+    // pedido salen de la coleccion parametros, no de una constante: el
+    // negocio los cambia sin desplegar.
+    const { horario, numeroEquipo } = await obtenerConfiguracionOperativa();
 
     // 3. La ventana la calcula el backend, nunca se toma del cliente.
     const ventana = calcularVentana(inicio, duracion);
@@ -302,10 +295,15 @@ export const crearPedido = async (req: Request, res: Response): Promise<void> =>
         return { tipo: 'solape', alternativas };
       }
 
-      // Sin choques: se guarda. El estado se fija aca y no se lee del body,
-      // para que el cliente no pueda crear un pedido en otro estado.
+      // Sin choques: se guarda. El numero se genera aca adentro, despues de
+      // todas las validaciones y justo antes de guardar, para que dos altas
+      // simultaneas (encoladas por ejecutarEnSerie) nunca calculen el mismo
+      // numero. El estado se fija aca y no se lee del body, para que el
+      // cliente no pueda crear un pedido en otro estado.
+      const numeroPedido = await generarNumeroPedido(numeroEquipo);
+
       const pedido = await Pedido.create({
-        numeroPedido: numero,
+        numeroPedido,
         proveedorId,
         tipoProducto: tipo,
         fechaHoraProgramada: inicio,
@@ -398,24 +396,26 @@ export const actualizarPedido = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    // Sprint 3: un pedido en pleno ciclo de descarga no se edita (ver la
+    // constante arriba).
+    if (ESTADOS_BLOQUEADOS_EDICION.includes(pedido.estado)) {
+      res.status(400).json({
+        mensaje: `No se puede modificar un pedido en estado ${pedido.estado}`
+      });
+      return;
+    }
+
     const { numeroPedido, proveedorId, tipoProducto } = req.body ?? {};
 
-    if (numeroPedido !== undefined) {
-      if (typeof numeroPedido !== 'string' || numeroPedido.trim() === '') {
-        res.status(400).json({ mensaje: 'numeroPedido debe ser un texto' });
-        return;
-      }
-
-      const numero = numeroPedido.trim();
-
-      // Se excluye el propio pedido: si no, guardar sin cambiar el numero
-      // chocaria consigo mismo. El indice unico sigue siendo la garantia final.
-      if (await Pedido.exists({ numeroPedido: numero, _id: { $ne: pedido._id } })) {
-        res.status(400).json({ mensaje: `Ya existe un pedido con el número ${numero}` });
-        return;
-      }
-
-      pedido.numeroPedido = numero;
+    // El numero de pedido se genera en el servidor (ver numeroPedido.ts) y
+    // ya no se puede editar a mano. Mandar el mismo numero que ya tiene no
+    // es un error (un formulario puede devolver el objeto completo), pero
+    // mandar uno distinto si lo es.
+    if (numeroPedido !== undefined && numeroPedido !== pedido.numeroPedido) {
+      res.status(400).json({
+        mensaje: 'El número de pedido se genera automáticamente y no se puede modificar'
+      });
+      return;
     }
 
     if (proveedorId !== undefined) {
@@ -649,6 +649,15 @@ export const inactivarPedido = async (req: Request, res: Response): Promise<void
     // cliente el resultado es el mismo y no hay nada que dar de baja.
     if (!pedido) {
       res.status(404).json({ mensaje: 'El pedido indicado no existe o ya está inactivo' });
+      return;
+    }
+
+    // Sprint 3: inactivar un pedido DESCARGANDO dejaria su gateway OCUPADO
+    // para siempre, sin manera de finalizar esa descarga.
+    if (ESTADOS_BLOQUEADOS_EDICION.includes(pedido.estado)) {
+      res.status(400).json({
+        mensaje: `No se puede inactivar un pedido en estado ${pedido.estado}`
+      });
       return;
     }
 

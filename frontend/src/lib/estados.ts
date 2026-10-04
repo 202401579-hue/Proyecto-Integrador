@@ -4,7 +4,11 @@ export type EstadoPedido =
   | "A TIEMPO"
   | "TARDÍO"
   | "AUSENTE"
-  | "CANCELADO";
+  | "CANCELADO"
+  // Sprint 3: ciclo de descarga en el gateway.
+  | "EN COLA"
+  | "DESCARGANDO"
+  | "FINALIZADO";
 
 const CLASE_POR_ESTADO: Record<EstadoPedido, string> = {
   PROGRAMADO: "bg-secondary",
@@ -13,13 +17,24 @@ const CLASE_POR_ESTADO: Record<EstadoPedido, string> = {
   TARDÍO: "bg-warning",
   AUSENTE: "bg-danger",
   CANCELADO: "bg-dark",
+  "EN COLA": "bg-primary-subtle",
+  DESCARGANDO: "bg-primary",
+  FINALIZADO: "bg-light border",
 };
 
 const CLASE_DESCONOCIDA = "bg-secondary";
 
 // bg-info y bg-warning son colores claros en Bootstrap: con texto blanco
 // encima el contraste es malo, así que esos dos casos llevan texto oscuro.
-const TEXTO_OSCURO: EstadoPedido[] = ["ANTICIPADO", "TARDÍO"];
+// Lo mismo EN COLA (bg-primary-subtle) y FINALIZADO (bg-light), que tambien
+// son claros.
+const TEXTO_OSCURO: EstadoPedido[] = ["ANTICIPADO", "TARDÍO", "EN COLA", "FINALIZADO"];
+
+// EN COLA usa ademas una clase de texto propia (text-primary-emphasis) en
+// vez del text-dark genérico, para que combine con bg-primary-subtle.
+const CLASE_TEXTO_ESPECIAL: Partial<Record<EstadoPedido, string>> = {
+  "EN COLA": "text-primary-emphasis",
+};
 
 /**
  * Devuelve la clase de color de Bootstrap para un estado de pedido.
@@ -36,6 +51,8 @@ export function claseColorEstado(estado: string): string {
 
 /** Clase de color de texto que combina bien con claseColorEstado(estado). */
 export function claseTextoEstado(estado: string): string {
+  const especial = CLASE_TEXTO_ESPECIAL[estado as EstadoPedido];
+  if (especial) return especial;
   return TEXTO_OSCURO.includes(estado as EstadoPedido) ? "text-dark" : "text-white";
 }
 

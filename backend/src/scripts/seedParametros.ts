@@ -51,6 +51,12 @@ const parametrosIniciales = [
     valor: '60',
     descripcion:
       'Minutos después del inicio a partir de los cuales el pedido se considera AUSENTE'
+  },
+  {
+    clave: CLAVES_PARAMETROS.numeroEquipo,
+    valor: '04',
+    descripcion:
+      'Número de equipo usado como prefijo del número de pedido autogenerado (PED-EQUIxx-NNNNNNNNN)'
   }
 ];
 

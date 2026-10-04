@@ -2,9 +2,12 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { conectarDB } from '../config/database';
 import Proveedor from '../models/Proveedor';
-import Pedido from '../models/Pedido';
+import Pedido, { IPedido } from '../models/Pedido';
+import Descarga from '../models/Descarga';
+import Gateway from '../models/Gateway';
 import { HorarioOperativo, calcularVentana, esDiaHabil } from '../services/ventanaHoraria';
 import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
+import { generarNumeroPedido } from '../services/numeroPedido';
 import { Tolerancias } from '../services/puntualidad';
 
 dotenv.config();
@@ -60,12 +63,13 @@ const proveedoresDePrueba = [
 const HORA_BLOQUEADOR = 9;
 const DURACION_BLOQUEADOR_MINUTOS = 60;
 
-// Codigo de orden de compra del bloqueador. Los pedidos que se creen en
-// la demo tienen que usar otro, porque numeroPedido no se puede repetir.
-const NUMERO_PEDIDO_BLOQUEADOR = 'OC-2026-0001';
-
 // Duracion de los pedidos preparados para la demo de arribos (HU-02).
 const DURACION_ARRIBO_MINUTOS = 30;
+
+// Duracion de los pedidos ya llegados que se insertan para la demo de
+// descargas (HU-03): hace falta un pedido con llegada registrada para poder
+// iniciar una descarga, y el reloj de la demo no da tiempo a esperar uno.
+const DURACION_LLEGADO_MINUTOS = 45;
 
 /**
  * Pedidos para demostrar el control de arribos.
@@ -83,7 +87,6 @@ const DURACION_ARRIBO_MINUTOS = 30;
  */
 const pedidosDeArribo = (tolerancias: Tolerancias) => [
   {
-    numeroPedido: 'OC-2026-0010',
     // Mas de `anticipadoMinutos` en el futuro: registrar la llegada ahora
     // cae antes del margen y clasifica ANTICIPADO.
     minutosDesdeAhora: tolerancias.anticipadoMinutos + 60,
@@ -91,21 +94,18 @@ const pedidosDeArribo = (tolerancias: Tolerancias) => [
     comoDemostrarlo: 'registrar la llegada ahora'
   },
   {
-    numeroPedido: 'OC-2026-0011',
     // Arranca en unos minutos: la llegada entra dentro de los margenes.
     minutosDesdeAhora: 5,
     esperado: 'A TIEMPO',
     comoDemostrarlo: 'registrar la llegada ahora'
   },
   {
-    numeroPedido: 'OC-2026-0012',
     // Ya empezo, paso el margen tardio pero no el limite de ausencia.
     minutosDesdeAhora: -(tolerancias.tardioMinutos + 15),
     esperado: 'TARDÍO',
     comoDemostrarlo: 'registrar la llegada ahora'
   },
   {
-    numeroPedido: 'OC-2026-0013',
     // Paso el limite de ausencia y nadie registro llegada: queda para el
     // control de ausencias (o para mostrar una llegada que llego tardisimo).
     minutosDesdeAhora: -(tolerancias.ausenteMinutos + 30),
@@ -164,17 +164,27 @@ const horaCorta = (fecha: Date): string =>
 const sembrar = async (): Promise<void> => {
   await conectarDB();
 
-  // El horario operativo y las tolerancias viven en la coleccion parametros
-  // (npm run seed:parametros). Si faltan, la configuracion cae en sus valores
-  // por defecto y avisa por consola.
-  const { horario, tolerancias } = await obtenerConfiguracionOperativa();
+  // El horario operativo, las tolerancias y el prefijo del numero de pedido
+  // viven en la coleccion parametros (npm run seed:parametros). Si faltan,
+  // la configuracion cae en sus valores por defecto y avisa por consola.
+  const { horario, tolerancias, numeroEquipo } = await obtenerConfiguracionOperativa();
 
   // Se borran los pedidos antes que los proveedores para no dejar, ni por
-  // un instante, pedidos apuntando a proveedores que ya no existen.
+  // un instante, pedidos apuntando a proveedores que ya no existen. Las
+  // descargas se borran tambien: son datos de prueba de corridas anteriores
+  // y referencian pedidos que se estan por borrar.
   const pedidosBorrados = await Pedido.deleteMany({});
   const proveedoresBorrados = await Proveedor.deleteMany({});
+  const descargasBorradas = await Descarga.deleteMany({});
   console.log(`[Seed demo] Pedidos eliminados: ${pedidosBorrados.deletedCount}`);
   console.log(`[Seed demo] Proveedores eliminados: ${proveedoresBorrados.deletedCount}`);
+  console.log(`[Seed demo] Descargas eliminadas: ${descargasBorradas.deletedCount}`);
+
+  // Los gateways NO se borran: las descargas los referencian por _id, y
+  // borrarlos y recrearlos les cambiaria el id. En cambio se dejan todos en
+  // LIBRE, por si quedo alguno OCUPADO de un ensayo anterior sin finalizar.
+  const gatewaysLiberados = await Gateway.updateMany({ activo: true }, { estado: 'LIBRE' });
+  console.log(`[Seed demo] Gateways puestos en LIBRE: ${gatewaysLiberados.modifiedCount}`);
 
   // create() y no insertMany(): asi pasan las validaciones del esquema
   // (enum de categoria, formato del email) igual que en la API.
@@ -195,7 +205,7 @@ const sembrar = async (): Promise<void> => {
   );
 
   const bloqueador = await Pedido.create({
-    numeroPedido: NUMERO_PEDIDO_BLOQUEADOR,
+    numeroPedido: await generarNumeroPedido(numeroEquipo),
     proveedorId: proveedorBloqueador._id,
     tipoProducto: 'construcción',
     fechaHoraProgramada: ventana.inicio,
@@ -237,26 +247,33 @@ const sembrar = async (): Promise<void> => {
   const arribos = pedidosDeArribo(tolerancias);
   const proveedorArribos = proveedores[1];
 
-  const arribosCreados = await Pedido.create(
-    arribos.map((arribo) => {
-      const ventanaArribo = calcularVentana(
-        new Date(Date.now() + arribo.minutosDesdeAhora * 60 * 1000),
-        DURACION_ARRIBO_MINUTOS
-      );
+  // Se crean uno a la vez, con await en cada vuelta: generarNumeroPedido lee
+  // el numero mas alto ya guardado, asi que dos llamadas en paralelo (un
+  // Promise.all o un .map con create() en lote) podrian calcular el mismo
+  // numero. Uno a la vez, cada create() ya quedo guardado antes de generar
+  // el siguiente.
+  const arribosCreados: IPedido[] = [];
 
-      return {
-        numeroPedido: arribo.numeroPedido,
-        proveedorId: proveedorArribos._id,
-        tipoProducto: 'general' as const,
-        fechaHoraProgramada: ventanaArribo.inicio,
-        duracionEstimadaMinutos: DURACION_ARRIBO_MINUTOS,
-        inicioVentana: ventanaArribo.inicio,
-        finVentana: ventanaArribo.fin,
-        estado: 'PROGRAMADO' as const,
-        usuarioCreacion: USUARIO_SEED
-      };
-    })
-  );
+  for (const arribo of arribos) {
+    const ventanaArribo = calcularVentana(
+      new Date(Date.now() + arribo.minutosDesdeAhora * 60 * 1000),
+      DURACION_ARRIBO_MINUTOS
+    );
+
+    const pedido = await Pedido.create({
+      numeroPedido: await generarNumeroPedido(numeroEquipo),
+      proveedorId: proveedorArribos._id,
+      tipoProducto: 'general' as const,
+      fechaHoraProgramada: ventanaArribo.inicio,
+      duracionEstimadaMinutos: DURACION_ARRIBO_MINUTOS,
+      inicioVentana: ventanaArribo.inicio,
+      finVentana: ventanaArribo.fin,
+      estado: 'PROGRAMADO' as const,
+      usuarioCreacion: USUARIO_SEED
+    });
+
+    arribosCreados.push(pedido);
+  }
 
   console.log(
     `[Seed demo] Pedidos para el control de arribos: ${arribosCreados.length} ` +
@@ -269,24 +286,75 @@ const sembrar = async (): Promise<void> => {
   arribos.forEach((arribo, indice) => {
     const pedido = arribosCreados[indice];
     console.log(
-      `  - ${arribo.numeroPedido}  ventana ${horaCorta(pedido.inicioVentana)} a ` +
+      `  - ${pedido.numeroPedido}  ventana ${horaCorta(pedido.inicioVentana)} a ` +
         `${horaCorta(pedido.finVentana)}  ->  ${arribo.esperado.padEnd(10)} ` +
         `(${arribo.comoDemostrarlo})`
     );
   });
 
-  console.log('[Seed demo] Para la demo (POST /api/pedidos, 60 min):');
-  console.log(
-    `  - pedido valido -> "numeroPedido": "OC-2026-0002", "fechaHoraProgramada": "${isoLocal(libre)}"`
-  );
-  console.log(
-    `  - solapamiento  -> "numeroPedido": "OC-2026-0003", "fechaHoraProgramada": "${isoLocal(choque)}"`
-  );
+  console.log('[Seed demo] Para la demo (POST /api/pedidos, 60 min, el número se genera solo):');
+  console.log(`  - pedido valido -> "fechaHoraProgramada": "${isoLocal(libre)}"`);
+  console.log(`  - solapamiento  -> "fechaHoraProgramada": "${isoLocal(choque)}"`);
   console.log('[Seed demo] Para la demo de arribos (POST /api/llegadas, rol Operador):');
-  console.log('  - { "numeroPedido": "OC-2026-0010" }  ->  ANTICIPADO');
-  console.log('  - { "numeroPedido": "OC-2026-0011" }  ->  A TIEMPO');
-  console.log('  - { "numeroPedido": "OC-2026-0012" }  ->  TARDÍO');
-  console.log('  - OC-2026-0013 queda sin llegada: POST /api/llegadas/control-ausencias -> AUSENTE');
+  console.log(`  - { "numeroPedido": "${arribosCreados[0].numeroPedido}" }  ->  ANTICIPADO`);
+  console.log(`  - { "numeroPedido": "${arribosCreados[1].numeroPedido}" }  ->  A TIEMPO`);
+  console.log(`  - { "numeroPedido": "${arribosCreados[2].numeroPedido}" }  ->  TARDÍO`);
+  console.log(
+    `  - ${arribosCreados[3].numeroPedido} queda sin llegada: ` +
+      'POST /api/llegadas/control-ausencias -> AUSENTE'
+  );
+
+  // ---------------------------------------------------------------------
+  // Pedidos ya llegados, para la demo de descargas (HU-03). Se insertan
+  // directamente con estado A TIEMPO y fechaHoraLlegadaReal, sin depender
+  // del reloj: asi no importa a que hora del dia se haga la demo, siempre
+  // hay pedidos listos para iniciar una descarga. Sus ventanas (13:00,
+  // 14:00 y 15:00 del mismo dia del bloqueador) no se solapan con el
+  // bloqueador (09:00-10:00) ni entre si.
+  const proveedorGeneral = proveedores[1];
+  const proveedorConstruccion = proveedores[0];
+
+  const pedidosLlegados = [
+    { hora: 13, tipoProducto: 'general' as const, proveedor: proveedorGeneral },
+    { hora: 14, tipoProducto: 'general' as const, proveedor: proveedorGeneral },
+    { hora: 15, tipoProducto: 'construcción' as const, proveedor: proveedorConstruccion }
+  ];
+
+  const llegadosCreados: IPedido[] = [];
+
+  for (const { hora, tipoProducto, proveedor } of pedidosLlegados) {
+    const horaLlegada = new Date(ventana.inicio.getTime());
+    horaLlegada.setHours(hora, 0, 0, 0);
+
+    const ventanaLlegado = calcularVentana(horaLlegada, DURACION_LLEGADO_MINUTOS);
+
+    const pedido = await Pedido.create({
+      numeroPedido: await generarNumeroPedido(numeroEquipo),
+      proveedorId: proveedor._id,
+      tipoProducto,
+      fechaHoraProgramada: ventanaLlegado.inicio,
+      duracionEstimadaMinutos: DURACION_LLEGADO_MINUTOS,
+      inicioVentana: ventanaLlegado.inicio,
+      finVentana: ventanaLlegado.fin,
+      estado: 'A TIEMPO',
+      fechaHoraLlegadaReal: ventanaLlegado.inicio,
+      usuarioCreacion: USUARIO_SEED
+    });
+
+    llegadosCreados.push(pedido);
+  }
+
+  console.log('[Seed demo] Pedidos ya llegados, listos para iniciar una descarga:');
+  llegadosCreados.forEach((pedido) => {
+    console.log(
+      `  - ${pedido.numeroPedido}  ${pedido.tipoProducto.padEnd(12)}  ` +
+        `${horaCorta(pedido.inicioVentana)}  (${pedido.estado})`
+    );
+  });
+  console.log(
+    '[Seed demo] Usarlos en POST /api/descargas/iniciar: los dos "general" van en los ' +
+      'gateways 1 a 4, el de "construcción" solo en el gateway 5.'
+  );
 
   await mongoose.disconnect();
   console.log('[Seed demo] Listo.');
