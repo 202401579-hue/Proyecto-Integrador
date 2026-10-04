@@ -22,12 +22,18 @@ export const CLAVES_PARAMETROS = {
   diasHabiles: 'DIAS_HABILES',
   toleranciaAnticipadoMinutos: 'TOLERANCIA_ANTICIPADO_MINUTOS',
   toleranciaTardioMinutos: 'TOLERANCIA_TARDIO_MINUTOS',
-  toleranciaAusenteMinutos: 'TOLERANCIA_AUSENTE_MINUTOS'
+  toleranciaAusenteMinutos: 'TOLERANCIA_AUSENTE_MINUTOS',
+  // Prefijo del numeroPedido autogenerado (PED-EQUI04-NNNNNNNNN). No es un
+  // horario ni una tolerancia, pero vive aca para que se lea igual que los
+  // demas: con obtenerConfiguracionOperativa(), con cache y valor por
+  // defecto, en lugar de consultar la coleccion parametros directamente.
+  numeroEquipo: 'NUMERO_EQUIPO'
 } as const;
 
 export interface ConfiguracionOperativa {
   horario: HorarioOperativo;
   tolerancias: Tolerancias;
+  numeroEquipo: string;
 }
 
 /**
@@ -49,7 +55,8 @@ export const CONFIGURACION_POR_DEFECTO: ConfiguracionOperativa = {
     anticipadoMinutos: 15,
     tardioMinutos: 15,
     ausenteMinutos: 60
-  }
+  },
+  numeroEquipo: '04'
 };
 
 /** Segundos que se reutiliza la configuracion ya leida (ver el cache abajo). */
@@ -149,7 +156,7 @@ export const obtenerConfiguracionOperativa = async (): Promise<ConfiguracionOper
     .lean();
 
   const valores = new Map(filas.map((fila) => [fila.clave, fila.valor]));
-  const { horario, tolerancias } = CONFIGURACION_POR_DEFECTO;
+  const { horario, tolerancias, numeroEquipo: numeroEquipoPorDefecto } = CONFIGURACION_POR_DEFECTO;
 
   const horaApertura = aEntero(
     CLAVES_PARAMETROS.horaApertura,
@@ -206,6 +213,19 @@ export const obtenerConfiguracionOperativa = async (): Promise<ConfiguracionOper
     ausenteMinutos = Math.max(tardioMinutos + 1, tolerancias.ausenteMinutos);
   }
 
+  // numeroEquipo es texto, no un entero (puede llevar ceros a la izquierda,
+  // como "04"), asi que no pasa por aEntero: solo se avisa si falta.
+  const numeroEquipoTexto = valores.get(CLAVES_PARAMETROS.numeroEquipo);
+
+  if (numeroEquipoTexto === undefined || numeroEquipoTexto.trim() === '') {
+    avisarFalta(CLAVES_PARAMETROS.numeroEquipo, numeroEquipoPorDefecto);
+  }
+
+  const numeroEquipo =
+    numeroEquipoTexto === undefined || numeroEquipoTexto.trim() === ''
+      ? numeroEquipoPorDefecto
+      : numeroEquipoTexto.trim();
+
   const valor: ConfiguracionOperativa = {
     horario: {
       horaApertura,
@@ -215,7 +235,8 @@ export const obtenerConfiguracionOperativa = async (): Promise<ConfiguracionOper
         horario.diasHabiles
       )
     },
-    tolerancias: { anticipadoMinutos, tardioMinutos, ausenteMinutos }
+    tolerancias: { anticipadoMinutos, tardioMinutos, ausenteMinutos },
+    numeroEquipo
   };
 
   cache = { valor, vence: Date.now() + SEGUNDOS_DE_CACHE * 1000 };

@@ -55,13 +55,17 @@ function minutosEntre(inicioIso: string, finIso: string) {
 // solo evita ofrecer un boton que se sabe que va a fallar.
 const ESTADOS_ACCIONABLES = ["PROGRAMADO", "AUSENTE"];
 
+// Sprint 3: un pedido en pleno ciclo de descarga no se edita, reprograma,
+// cancela ni inactiva (el backend lo rechaza con 400). Para estos tres
+// estados se ocultan directamente los botones, en vez de solo deshabilitarlos.
+const ESTADOS_SIN_ACCIONES = ["EN COLA", "DESCARGANDO", "FINALIZADO"];
+
 export default function PedidosPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
 
   // --- Formulario principal: crear o editar ---
   const [idEditando, setIdEditando] = useState<string | null>(null);
-  const [numeroPedido, setNumeroPedido] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [tipoProducto, setTipoProducto] = useState("construcción");
   const [fechaHoraProgramada, setFechaHoraProgramada] = useState("");
@@ -107,7 +111,6 @@ export default function PedidosPage() {
 
   function limpiarFormulario() {
     setIdEditando(null);
-    setNumeroPedido("");
     setProveedorId("");
     setTipoProducto("construcción");
     setFechaHoraProgramada("");
@@ -116,7 +119,6 @@ export default function PedidosPage() {
 
   function iniciarEdicion(pedido: Pedido) {
     setIdEditando(pedido._id);
-    setNumeroPedido(pedido.numeroPedido);
     setProveedorId(pedido.proveedorId._id);
     setTipoProducto(pedido.tipoProducto);
     setEstado("reposo");
@@ -141,15 +143,16 @@ export default function PedidosPage() {
 
     try {
       if (enModoEdicion) {
-        // Editar solo toca numeroPedido, proveedorId y tipoProducto.
-        // La fecha se cambia aparte, con Reprogramar.
+        // Editar solo toca proveedorId y tipoProducto. El numeroPedido lo
+        // genera el servidor y ya no se puede modificar; la fecha se
+        // cambia aparte, con Reprogramar.
         const res = await fetch(`${API}/api/pedidos/${idEditando}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token()}`,
           },
-          body: JSON.stringify({ numeroPedido, proveedorId, tipoProducto }),
+          body: JSON.stringify({ proveedorId, tipoProducto }),
         });
 
         const data = await res.json();
@@ -174,7 +177,6 @@ export default function PedidosPage() {
           Authorization: `Bearer ${token()}`,
         },
         body: JSON.stringify({
-          numeroPedido,
           proveedorId,
           tipoProducto,
           fechaHoraProgramada: new Date(fechaHoraProgramada).toISOString(),
@@ -186,7 +188,9 @@ export default function PedidosPage() {
 
       if (res.status === 201) {
         setEstado("exito");
-        setMensaje("Pedido agendado correctamente.");
+        // El numero lo genera el servidor: se muestra el que vino en la
+        // respuesta, nadie lo escribio en el formulario.
+        setMensaje(`Pedido ${data.numeroPedido} agendado correctamente.`);
         limpiarFormulario();
         cargarPedidos();
         return;
@@ -324,26 +328,15 @@ export default function PedidosPage() {
       <div className="card shadow-sm border-0 mb-4">
         <div className="card-body p-4">
           <h2 className="h5 mb-3">
-            {enModoEdicion ? `Editando ${numeroPedido || "pedido"}` : "Nuevo pedido"}
+            {enModoEdicion
+              ? `Editando ${
+                  pedidos.find((p) => p._id === idEditando)?.numeroPedido ?? "pedido"
+                }`
+              : "Nuevo pedido"}
           </h2>
 
           <form onSubmit={manejarEnvio} noValidate>
             <div className="row g-3">
-              <div className="col-md-6">
-                <label htmlFor="numeroPedido" className="form-label">
-                  Número de pedido
-                </label>
-                <input
-                  id="numeroPedido"
-                  className="form-control"
-                  placeholder="OC-2026-0147"
-                  required
-                  value={numeroPedido}
-                  onChange={(e) => setNumeroPedido(e.target.value)}
-                  disabled={cargando}
-                />
-              </div>
-
               <div className="col-md-6">
                 <label htmlFor="proveedorId" className="form-label">
                   Proveedor
@@ -497,6 +490,7 @@ export default function PedidosPage() {
           <tbody>
             {pedidos.map((p) => {
               const accionable = ESTADOS_ACCIONABLES.includes(p.estado);
+              const sinAcciones = ESTADOS_SIN_ACCIONES.includes(p.estado);
               return (
                 <Fragment key={p._id}>
                   <tr>
@@ -513,38 +507,42 @@ export default function PedidosPage() {
                       </span>
                     </td>
                     <td>
-                      <div className="d-flex flex-wrap gap-1">
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary btn-sm"
-                          onClick={() => iniciarEdicion(p)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline-primary btn-sm"
-                          disabled={!accionable}
-                          onClick={() => abrirReprogramar(p)}
-                        >
-                          Reprogramar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline-warning btn-sm"
-                          disabled={!accionable}
-                          onClick={() => cancelarPedido(p)}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline-danger btn-sm"
-                          onClick={() => inactivarPedido(p)}
-                        >
-                          Inactivar
-                        </button>
-                      </div>
+                      {sinAcciones ? (
+                        <span className="text-muted small">Sin acciones</span>
+                      ) : (
+                        <div className="d-flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary btn-sm"
+                            onClick={() => iniciarEdicion(p)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline-primary btn-sm"
+                            disabled={!accionable}
+                            onClick={() => abrirReprogramar(p)}
+                          >
+                            Reprogramar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline-warning btn-sm"
+                            disabled={!accionable}
+                            onClick={() => cancelarPedido(p)}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => inactivarPedido(p)}
+                          >
+                            Inactivar
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
 
