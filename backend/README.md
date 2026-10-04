@@ -48,6 +48,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 | `npm run dev` | Servidor en modo desarrollo, recarga al guardar |
 | `npm run seed` | Borra los usuarios y recrea los tres de prueba |
 | `npm run seed:parametros` | Borra los parámetros y recarga los iniciales: horario operativo y tolerancias |
+| `npm run seed:gateways` | Carga las cinco bahías de descarga y las deja en `LIBRE`; no borra ni cambia sus `_id` |
 | `npm run seed:demo` | Borra proveedores y pedidos y carga los datos de la demo (no toca usuarios ni parámetros) |
 | `npm run build` | Compila TypeScript a `dist/` |
 | `npm start` | Ejecuta la versión compilada |
@@ -268,9 +269,10 @@ Todas las respuestas de error llevan la clave `mensaje`.
 
 ### Regla 1 — Auditoría en las tres colecciones
 
-`proveedores`, `pedidos` y `parametros` tienen estos cinco campos. Están
-definidos una sola vez en `src/models/auditoria.ts`: **una colección nueva los
-suma con `...camposAuditoria()` y `opcionesAuditoria`**, no copiándolos.
+`proveedores`, `pedidos`, `parametros` y `gateways` tienen estos cinco campos.
+Están definidos una sola vez en `src/models/auditoria.ts`: **una colección
+nueva los suma con `...camposAuditoria()` y `opcionesAuditoria`**, no
+copiándolos.
 
 | Campo | Tipo | Quién lo escribe |
 |---|---|---|
@@ -329,6 +331,8 @@ no corresponde **403**.
 | `DELETE /api/parametros/:id` | Administrador | Baja lógica |
 | `POST /api/llegadas` | Operador, Coordinador | Registra el arribo y clasifica la puntualidad |
 | `POST /api/llegadas/control-ausencias` | Coordinador, Administrador | Marca `AUSENTE` los pedidos vencidos sin llegada |
+
+Los cinco endpoints de `/api/gateways` están en la sección del **Sprint 3**.
 
 Un `:id` con formato inválido responde **400** (`"El identificador ... no es
 válido"`) y uno que no existe o está inactivo, **404**.
@@ -572,9 +576,10 @@ Así la auditoría distingue dos cosas distintas que comparten estado:
 
 ---
 
-## Para las partes 2 y 3
+## Para las partes 2 y 3 del Sprint 2
 
-Lo que conviene respetar, y dónde está cada cosa.
+Lo que conviene respetar, y dónde está cada cosa. (El Sprint 3 tiene su propia
+sección más abajo.)
 
 **Si agregan una colección nueva:** modelo con `...camposAuditoria()` y
 `opcionesAuditoria`, nombre de la colección explícito como tercer argumento de
@@ -626,6 +631,197 @@ cámbienlas a propósito):
 
 ---
 
+## Sprint 3 — Gateways (bahías de descarga)
+
+Los **gateways** son las bahías físicas donde los camiones descargan. Son
+cinco y no cambian: representan algo que existe en el depósito, no registros
+que se den de alta todos los días.
+
+Este módulo sigue las dos reglas transversales del Sprint 2 sin cambiarlas:
+los cinco campos de auditoría y el borrado lógico (ver **Regla 1** y
+**Regla 2** más arriba). Todos los errores llevan la clave `mensaje`.
+
+### Los tres valores cerrados
+
+```
+numeroGateway        entero de 1 a 5, único, no se puede editar
+tipoCargaPermitida   "general" | "construcción"
+estado               "LIBRE" | "OCUPADO" | "FUERA DE SERVICIO"   (por defecto LIBRE)
+```
+
+Los textos van **exactos**: `"construcción"` en minúscula y con tilde, igual
+que la `categoria` del proveedor y el `tipoProducto` del pedido;
+`"FUERA DE SERVICIO"` en mayúsculas y con espacios.
+
+**RN-07 y RN-08 — qué carga acepta cada bahía.** No es configurable: sale del
+número de la bahía.
+
+| Bahía | Solo acepta |
+|---|---|
+| 1, 2, 3, 4 | `"general"` |
+| 5 | `"construcción"` |
+
+Se valida al crear y al editar (400), y también en el modelo, para que ningún
+script pueda guardar una bahía inconsistente. Como `numeroGateway` no se
+edita, en la práctica **el tipo de carga de una bahía nunca cambia**: la
+validación está para que un error de carga de datos no pase.
+
+### El estado OCUPADO no se edita por la API
+
+Esta es la regla que más importa para quien programe las descargas:
+
+- El `PUT` **nunca** pone una bahía en `OCUPADO`.
+- El `PUT` **nunca** cambia el estado de una bahía que ya está `OCUPADO`.
+- El `DELETE` no puede dar de baja una bahía `OCUPADO`.
+
+El motivo es concreto: si se pudiera editar a mano, un administrador podría
+marcar como `LIBRE` una bahía con un camión descargando, y el sistema la
+ofrecería para otra entrega. `OCUPADO` lo asigna y lo quita **el registro de
+descargas**, que es el único que sabe cuándo empieza y cuándo termina una.
+
+Por la API solo se pueden fijar `LIBRE` y `FUERA DE SERVICIO`.
+
+### Endpoints
+
+Todos piden `Authorization: Bearer <token>`: sin token **401**, con un rol que
+no corresponde **403**.
+
+| Método y ruta | Rol | Qué hace |
+|---|---|---|
+| `GET /api/gateways` | Administrador, Coordinador | Lista las bahías activas, ordenadas por número |
+| `GET /api/gateways/:id` | Administrador, Coordinador | Una bahía |
+| `POST /api/gateways` | Administrador | Alta (reponer una bahía) |
+| `PUT /api/gateways/:id` | Administrador | Cambia el estado y/o el tipo de carga |
+| `DELETE /api/gateways/:id` | Administrador | Baja lógica |
+
+El Coordinador puede leer porque necesita saber qué bahías hay y cuáles están
+disponibles para asignar una descarga. El Operador no accede al módulo.
+
+Los dos `GET` devuelven **solo las bahías activas**, salvo con
+`?incluirInactivos=true`, igual que el resto del proyecto.
+
+**POST** — `{ numeroGateway, tipoCargaPermitida, estado? }`. Los dos primeros
+son obligatorios; `estado` es opcional y solo admite `"LIBRE"` (por defecto) o
+`"FUERA DE SERVICIO"`. Devuelve **201** con la bahía creada.
+
+**PUT** — `{ estado?, tipoCargaPermitida? }`, los dos opcionales: solo se
+tocan los campos que vengan. Devuelve **200** con la bahía actualizada.
+Mandar `numeroGateway` con el mismo valor que ya tiene **no** es un error (así
+un formulario puede devolver el objeto completo); mandarlo distinto da 400.
+
+**DELETE** — **200** `{ mensaje: "Gateway inactivado", gateway }`.
+
+### Errores
+
+```
+GET /:id, PUT, DELETE
+  400  "El identificador del gateway no es válido"            id mal formado
+  404  "El gateway indicado no existe o está inactivo"
+  404  "El gateway indicado no existe o ya está inactivo"     (solo DELETE)
+
+POST
+  400  "El número de gateway debe ser un número entero entre 1 y 5"
+  400  "El tipo de carga permitida debe ser "construcción" o "general""
+  400  "El gateway N solo admite carga "X""                   RN-07 / RN-08
+  400  "El estado debe ser "LIBRE" o "FUERA DE SERVICIO""
+  409  "Ya existe un gateway con ese número"
+
+PUT
+  400  "El número de gateway no se puede modificar: es la identidad física
+        de la bahía"
+  400  "El tipo de carga permitida debe ser "construcción" o "general""
+  400  "El gateway N solo admite carga "X""                   RN-07 / RN-08
+  400  "El estado debe ser "LIBRE" o "FUERA DE SERVICIO""
+  400  "El estado OCUPADO lo asigna el registro de descargas, no la edición
+        del gateway"
+  400  "El gateway está OCUPADO: finalice la descarga en curso antes de
+        ponerlo FUERA DE SERVICIO"                            RN-GW-01
+  400  "No se puede cambiar el estado de un gateway OCUPADO: finalice la
+        descarga en curso"
+  400  "No se puede cambiar el tipo de carga de un gateway OCUPADO:
+        finalice la descarga en curso"                        RN-GW-02
+
+DELETE
+  400  "No se puede dar de baja un gateway OCUPADO: finalice la descarga
+        en curso"
+```
+
+El orden de los chequeos del `PUT` es a propósito: **RN-GW-01 y RN-GW-02 se
+revisan antes** que la lista cerrada y que RN-07/08, para que el mensaje hable
+del problema real (hay una descarga en curso) y no del siguiente chequeo que
+también falla.
+
+### Forma del documento
+
+```json
+{
+  "_id": "6ac26dba097e65216ad5a84b",
+  "numeroGateway": 1,
+  "tipoCargaPermitida": "general",
+  "estado": "LIBRE",
+  "activo": true,
+  "usuarioCreacion": "Seed de gateways",
+  "usuarioActualizacion": "Ana Administradora",
+  "fechaCreacion": "2026-10-04T01:12:34.567Z",
+  "fechaActualizacion": "2026-10-04T01:20:11.004Z",
+  "__v": 0
+}
+```
+
+### `npm run seed:gateways`
+
+Carga las cinco bahías: 1 a 4 en `"general"` y la 5 en `"construcción"`, todas
+`LIBRE` y activas.
+
+**No borra la colección**, a diferencia de `seed:parametros`. Crea las que
+falten y devuelve las existentes al estado de arranque (`LIBRE` y activas),
+**conservando sus `_id`**. El motivo: las descargas referencian los gateways
+por `_id`, y borrar y recrear les cambiaría el id, dejando esas descargas
+apuntando a bahías que ya no existen.
+
+Es idempotente: correrlo dos veces seguidas no duplica nada. Y sirve para
+volver a dejar las bahías listas después de un ensayo, que es justamente el
+caso de la demo. El resumen de cada corrida dice qué corrigió:
+
+```
+[Seed gateways] Bahias listas: 5
+  = 6ac26dba...84c  gateway 2  general       LIBRE   (estado OCUPADO -> LIBRE)
+  = 6ac26dba...84d  gateway 3  general       LIBRE   (reactivada)
+  = 6ac26dba...84f  gateway 5  construcción  LIBRE   (ya estaba lista)
+```
+
+### Para quien programe las descargas
+
+Lo que se puede importar de `src/models/Gateway.ts`, para no repetir ninguna
+de estas reglas:
+
+```
+ESTADOS_GATEWAY             ['LIBRE', 'OCUPADO', 'FUERA DE SERVICIO']
+TIPOS_CARGA                 la misma lista que las categorías del proveedor
+EstadoGateway, TipoCarga    los tipos de TypeScript
+NUMERO_GATEWAY_MINIMO       1
+NUMERO_GATEWAY_MAXIMO       5
+NUMERO_GATEWAY_CONSTRUCCION 5
+tipoCargaEsperado(numero)   el tipo de carga que le toca a esa bahía
+```
+
+**Falta la pieza que pone y saca el `OCUPADO`**, porque es del módulo de
+descargas y no de este. Quien la escriba tiene que resolver tres cosas antes
+de ocupar una bahía, y conviene que queden en un solo lugar (por ejemplo un
+`services/ocupacionGateway.ts`) en lugar de repetirlas en cada endpoint:
+
+1. que la bahía esté **activa**;
+2. que esté en **`LIBRE`** (una `FUERA DE SERVICIO` no recibe camiones, y una
+   `OCUPADO` ya tiene uno);
+3. que su **`tipoCargaPermitida` coincida con el `tipoProducto` del pedido**
+   — es RN-07 y RN-08 aplicadas al momento de asignar, no al de configurar.
+
+Y al finalizar la descarga, devolverla a `LIBRE`. Mientras eso no exista,
+para probar hay que forzar el estado directo en la base; la API no lo permite
+a propósito.
+
+---
+
 ## Demo del módulo
 
 Se muestran cuatro casos: registrar un proveedor, crear un pedido válido,
@@ -649,6 +845,16 @@ con sus cuatro clasificaciones de puntualidad.
 
    Sin esto el backend funciona igual, con sus valores por defecto, pero avisa
    por consola en cada petición y no se pueden mostrar los parámetros por la API.
+
+   Y, también una sola vez, las cinco bahías de descarga:
+
+   ```bash
+   npm run seed:gateways
+   ```
+
+   Este se puede repetir sin miedo: deja las bahías en `LIBRE` y activas sin
+   cambiarles el `_id`, así que es lo que hay que correr si un ensayo dejó
+   alguna ocupada o fuera de servicio.
 
 3. **El mismo día de la demo, antes de empezar,** correr:
 
@@ -795,7 +1001,8 @@ backend/
 │   │   ├── proveedorController.ts    → CRUD de proveedores (con baja lógica)
 │   │   ├── pedidoController.ts       → CRUD de pedidos, reprogramar y cancelar
 │   │   ├── parametroController.ts    → CRUD de la configuración del sistema
-│   │   └── llegadaController.ts      → registro de arribos y control de ausencias
+│   │   ├── llegadaController.ts      → registro de arribos y control de ausencias
+│   │   └── gatewayController.ts      → CRUD de las bahías, con sus reglas de estado
 │   ├── middlewares/
 │   │   ├── verificarToken.ts         → valida la firma del JWT (401)
 │   │   └── autorizarRoles.ts         → compara el rol del token (403)
@@ -804,13 +1011,15 @@ backend/
 │   │   ├── Usuario.ts                → esquema + hash bcrypt + comparación
 │   │   ├── Proveedor.ts              → esquema del proveedor (colección proveedores)
 │   │   ├── Pedido.ts                 → esquema del pedido, estados y referencia a Proveedor
-│   │   └── Parametro.ts              → configuración del sistema (clave/valor)
+│   │   ├── Parametro.ts              → configuración del sistema (clave/valor)
+│   │   └── Gateway.ts                → bahías de descarga (número, carga y estado)
 │   ├── routes/
 │   │   ├── authRoutes.ts             → rutas de /api/auth
 │   │   ├── proveedorRoutes.ts        → rutas de /api/proveedores
 │   │   ├── pedidoRoutes.ts           → rutas de /api/pedidos
 │   │   ├── parametroRoutes.ts        → rutas de /api/parametros
-│   │   └── llegadaRoutes.ts          → rutas de /api/llegadas
+│   │   ├── llegadaRoutes.ts          → rutas de /api/llegadas
+│   │   └── gatewayRoutes.ts          → rutas de /api/gateways
 │   ├── services/
 │   │   ├── ventanaHoraria.ts         → solapamiento, huecos libres y alternativas (puro)
 │   │   ├── puntualidad.ts            → clasificación de la llegada (puro)
@@ -822,6 +1031,7 @@ backend/
 │   ├── scripts/
 │   │   ├── seed.ts                   → carga los usuarios de prueba
 │   │   ├── seedParametros.ts         → carga el horario operativo y las tolerancias
+│   │   ├── seedGateways.ts           → carga las cinco bahías de descarga
 │   │   └── seedDemo.ts               → carga proveedores y los pedidos de la demo
 │   ├── types/                        → tipos del payload y del Request
 │   └── server.ts                     → Express, CORS y arranque
@@ -842,9 +1052,9 @@ backend/
 - **TypeScript 5.9:** no subir a la 7. `ts-node-dev` no funciona con esa
   versión y el `npm run dev` deja de arrancar.
 - **Textos de los enums:** van exactos, en minúscula y con tilde los de
-  `categoria` y `tipoProducto` (`"construcción"`), y en mayúscula los estados
-  (`"A TIEMPO"` con espacio, `"TARDÍO"` con tilde). El frontend compara el
-  texto tal cual.
+  `categoria`, `tipoProducto` y `tipoCargaPermitida` (`"construcción"`), y en
+  mayúscula los estados (`"A TIEMPO"` con espacio, `"TARDÍO"` con tilde,
+  `"FUERA DE SERVICIO"` con espacios). El frontend compara el texto tal cual.
 - **Nunca borrar registros.** El `DELETE` de la API es baja lógica. Si una
   prueba necesita la base limpia, se corren los seeds, no un `deleteMany` a
   mano desde un endpoint.
