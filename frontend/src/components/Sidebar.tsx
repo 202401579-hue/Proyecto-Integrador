@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { eliminarToken, Rol } from "@/lib/session";
@@ -15,9 +15,10 @@ const ENLACES_POR_ROL: Record<Rol, EnlaceSidebar[]> = {
   Administrador: [
     { href: "/administrador", label: "Inicio", icono: "bi-house" },
     { href: "/administrador/parametros", label: "Parámetros", icono: "bi-sliders" },
+    { href: "/administrador/gateways", label: "Gateways", icono: "bi-hdd-rack" },
   ],
   Coordinador: [
-    { href: "/coordinador", label: "Inicio", icono: "bi-house" },
+    { href: "/coordinador", label: "Tablero", icono: "bi-grid-3x3-gap" },
     { href: "/coordinador/proveedores", label: "Proveedores", icono: "bi-building" },
     { href: "/coordinador/pedidos", label: "Pedidos", icono: "bi-calendar-check" },
   ],
@@ -32,15 +33,14 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ rol }: SidebarProps) {
-  const [abierto, setAbierto] = useState(true);
+  // Arranca colapsado en pantallas angostas. Se calcula al crear el estado:
+  // el layout privado solo renderiza el sidebar en el navegador, así que
+  // window ya existe.
+  const [abierto, setAbierto] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 768
+  );
   const router = useRouter();
   const pathname = usePathname();
-
-  useEffect(() => {
-    if (window.innerWidth < 768) {
-      setAbierto(false);
-    }
-  }, []);
 
   function manejarLogout() {
     eliminarToken();
@@ -58,7 +58,7 @@ export default function Sidebar({ rol }: SidebarProps) {
         minHeight: "100vh",
         transition: "width 0.15s ease",
         flexShrink: 0,
-        background: "linear-gradient(180deg, #4e73df 0%, #224abe 100%)",
+        background: "#1f2a44",
       }}
     >
       <div className="d-flex align-items-center justify-content-between px-3 py-3 border-bottom border-light border-opacity-25">
