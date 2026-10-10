@@ -13,6 +13,7 @@ import { normalizarNFC } from '../models/Proveedor';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { filtroActivos } from '../services/borradoLogico';
 import { respondioErrorDeEscritura, respondioIdInvalido } from '../services/respuestasError';
+import { registrarEvento } from '../services/eventos';
 
 const MENSAJE_DUPLICADO = 'Ya existe un gateway con ese número';
 const MENSAJE_NO_ENCONTRADO = 'El gateway indicado no existe o está inactivo';
@@ -233,6 +234,9 @@ export const actualizarGateway = async (req: Request, res: Response): Promise<vo
     }
 
     const estaOcupado = gateway.estado === 'OCUPADO';
+    // Se guarda antes de modificar el documento: despues del save ya no hay
+    // de donde leer el estado anterior.
+    const estadoAnterior = gateway.estado;
 
     // --- Estado ---
     if (estado !== undefined) {
@@ -307,6 +311,23 @@ export const actualizarGateway = async (req: Request, res: Response): Promise<vo
 
     await gateway.save();
 
+    // Solo se registra si el estado cambio de verdad. Una edicion que ajusta
+    // otra cosa, o que manda el mismo estado que ya tenia, no es un evento de
+    // mantenimiento: llenaria la bitacora de lineas que no cuentan nada.
+    //
+    // Por como esta validado arriba, aca el cambio solo puede ser entre LIBRE
+    // y FUERA DE SERVICIO: OCUPADO no se asigna por edicion, y una bahia
+    // OCUPADA no acepta cambios de estado.
+    if (gateway.estado !== estadoAnterior) {
+      await registrarEvento(req, 'GATEWAY_MANTENIMIENTO', {
+        detalles: {
+          numeroGateway: gateway.numeroGateway,
+          estadoAnterior,
+          estadoNuevo: gateway.estado
+        }
+      });
+    }
+
     res.status(200).json(gateway);
   } catch (error) {
     if (respondioErrorDeEscritura(error, res, { mensajeDuplicado: MENSAJE_DUPLICADO })) {
@@ -352,10 +373,25 @@ export const inactivarGateway = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    const estadoAnterior = gateway.estado;
+
     gateway.activo = false;
     gateway.usuarioActualizacion = await nombreDelUsuario(req);
 
     await gateway.save();
+
+    // La baja tambien es mantenimiento: la bahia sale de operacion. Su estado
+    // no cambia (sigue como estaba, LIBRE o FUERA DE SERVICIO), asi que el
+    // evento lo deja claro con baja: true en lugar de inventar un estado
+    // nuevo que el documento no tiene.
+    await registrarEvento(req, 'GATEWAY_MANTENIMIENTO', {
+      detalles: {
+        numeroGateway: gateway.numeroGateway,
+        estadoAnterior,
+        estadoNuevo: gateway.estado,
+        baja: true
+      }
+    });
 
     res.status(200).json({ mensaje: 'Gateway inactivado', gateway });
   } catch (error) {
