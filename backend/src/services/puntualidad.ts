@@ -1,4 +1,4 @@
-import { EstadoPedido } from '../models/Pedido';
+import { Puntualidad } from '../models/Pedido';
 
 /**
  * Clasificacion de la puntualidad de un arribo (HU-02).
@@ -55,7 +55,7 @@ export const clasificarLlegada = (
   llegada: Date,
   inicioVentana: Date,
   tolerancias: Tolerancias
-): EstadoPedido => {
+): Puntualidad => {
   const diferencia = minutosDeDiferencia(llegada, inicioVentana);
 
   if (diferencia < -tolerancias.anticipadoMinutos) {

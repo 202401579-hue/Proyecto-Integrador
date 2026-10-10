@@ -40,6 +40,12 @@ export const marcarPedidosAusentes = async (tolerancias: Tolerancias): Promise<n
     {
       $set: {
         estado: 'AUSENTE',
+        // La ausencia tambien es una forma de puntualidad, y se guarda en su
+        // propio campo por la misma razon que las otras tres: el estado de un
+        // AUSENTE puede cambiar despues (al reprogramarlo vuelve a
+        // PROGRAMADO), y sin este campo se perderia el dato de que ese
+        // proveedor falto, que es justo lo que mide el cumplimiento.
+        puntualidad: 'AUSENTE',
         // No hay un usuario detras de esta escritura: la decide el sistema
         // al ver que el plazo vencio. Se deja dicho asi en la auditoria.
         usuarioActualizacion: 'Sistema (control de ausencias)'

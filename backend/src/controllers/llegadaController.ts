@@ -5,6 +5,7 @@ import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
 import { clasificarLlegada, limiteDeAusencia, minutosDeDiferencia } from '../services/puntualidad';
 import { marcarPedidosAusentes } from '../services/controlAusencias';
+import { registrarEvento } from '../services/eventos';
 
 /**
  * POST /api/llegadas
@@ -20,8 +21,12 @@ import { marcarPedidosAusentes } from '../services/controlAusencias';
  * el cliente, cualquiera podria "llegar a tiempo" escribiendo otra hora.
  *
  * Con esa hora y los margenes de la coleccion parametros se clasifica la
- * puntualidad (ANTICIPADO, A TIEMPO, TARDÍO o AUSENTE) y se guarda el
- * resultado en el pedido junto con fechaHoraLlegadaReal.
+ * puntualidad (ANTICIPADO, A TIEMPO, TARDÍO o AUSENTE) y se guarda en el
+ * campo puntualidad del pedido, junto con fechaHoraLlegadaReal.
+ *
+ * Desde el Sprint 4 el estado pasa a EN COLA en lugar de quedarse con la
+ * clasificacion: el camion ya esta en el deposito esperando bahia, y la
+ * puntualidad vive en su propio campo (ver models/Pedido.ts).
  */
 export const registrarLlegada = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -60,7 +65,11 @@ export const registrarLlegada = async (req: Request, res: Response): Promise<voi
       res.status(409).json({
         mensaje: 'El pedido ya registró su llegada',
         fechaHoraLlegadaReal: pedido.fechaHoraLlegadaReal,
-        estado: pedido.estado
+        estado: pedido.estado,
+        // Se suma a la respuesta porque desde el Sprint 4 el estado ya no
+        // dice con que puntualidad llego: puede ser EN COLA, DESCARGANDO o
+        // FINALIZADO. Sin este campo, quien recibe el 409 no podria saberlo.
+        puntualidad: pedido.puntualidad
       });
       return;
     }
@@ -69,23 +78,50 @@ export const registrarLlegada = async (req: Request, res: Response): Promise<voi
 
     // Hora del servidor, igual que el resto de las fechas del sistema.
     const llegada = new Date();
-    const estado = clasificarLlegada(llegada, pedido.inicioVentana, tolerancias);
+    const puntualidad = clasificarLlegada(llegada, pedido.inicioVentana, tolerancias);
 
     pedido.fechaHoraLlegadaReal = llegada;
-    pedido.estado = estado;
+    // La clasificacion va a su propio campo y ya no al estado. El estado
+    // sigue avanzando despues (DESCARGANDO, FINALIZADO) y se llevaria la
+    // puntualidad puesta; guardada aparte, queda para siempre.
+    pedido.puntualidad = puntualidad;
+    // El camion llego y espera bahia: eso es EN COLA. Es tambien el estado
+    // desde el que la promocion automatica lo va a tomar cuando se libere
+    // un gateway compatible.
+    pedido.estado = 'EN COLA';
     pedido.usuarioActualizacion = await nombreDelUsuario(req);
 
     await pedido.save();
     await pedido.populate('proveedorId');
 
+    const diferencia = minutosDeDiferencia(llegada, pedido.inicioVentana);
+
+    // La llegada ya quedo guardada: el evento se registra despues (ver
+    // services/eventos.ts para por que un evento que falla no la deshace).
+    await registrarEvento(req, 'LLEGADA_REGISTRADA', {
+      pedidoId: pedido._id,
+      detalles: {
+        numeroPedido: pedido.numeroPedido,
+        puntualidad,
+        // Se guarda el dato crudo y no solo la clasificacion: si manana se
+        // ajustan las tolerancias en parametros, la bitacora todavia permite
+        // saber cuantos minutos tarde llego ese camion en realidad.
+        minutosDeDiferencia: diferencia,
+        inicioVentana: pedido.inicioVentana
+      }
+    });
+
     res.status(200).json({
-      mensaje: `Llegada registrada: ${estado}`,
+      mensaje: `Llegada registrada: ${puntualidad}`,
       clasificacion: {
-        estado,
+        // El nombre del campo no cambia y sigue trayendo la puntualidad: es
+        // lo que muestra la caseta de arribos, y cambiarlo rompería la
+        // pantalla sin necesidad. Lo que cambio es de donde sale el dato.
+        estado: puntualidad,
         // Negativo si llego antes de la hora, positivo si llego despues.
         // Se devuelve para que el frontend pueda explicar el estado sin
         // tener que recalcular nada ni conocer los margenes.
-        minutosDeDiferencia: minutosDeDiferencia(llegada, pedido.inicioVentana),
+        minutosDeDiferencia: diferencia,
         inicioVentana: pedido.inicioVentana,
         limiteDeAusencia: limiteDeAusencia(pedido.inicioVentana, tolerancias),
         tolerancias

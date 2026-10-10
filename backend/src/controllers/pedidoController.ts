@@ -10,6 +10,7 @@ import Proveedor, { normalizarNFC } from '../models/Proveedor';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { filtroActivos } from '../services/borradoLogico';
 import { respondioErrorDeEscritura, respondioIdInvalido } from '../services/respuestasError';
+import { registrarEvento } from '../services/eventos';
 import {
   HorarioOperativo,
   VentanaHoraria,
@@ -541,6 +542,17 @@ export const reprogramarPedido = async (req: Request, res: Response): Promise<vo
 
     const usuarioActualizacion = await nombreDelUsuario(req);
 
+    // Se guardan antes de tocar el documento: despues del save ya no hay de
+    // donde leer la cita vieja, y es justamente lo que el evento tiene que
+    // contar.
+    const ventanaAnterior = {
+      inicioVentana: pedido.inicioVentana,
+      finVentana: pedido.finVentana,
+      duracionEstimadaMinutos: pedido.duracionEstimadaMinutos,
+      estado: pedido.estado,
+      puntualidad: pedido.puntualidad
+    };
+
     // Misma cola que el alta: revisar el solapamiento y guardar tienen que ir
     // juntos, o dos reprogramaciones simultaneas podrian caer en la misma franja.
     const resultado = await ejecutarEnSerie(async (): Promise<ResultadoReprogramacion> => {
@@ -558,6 +570,10 @@ export const reprogramarPedido = async (req: Request, res: Response): Promise<vo
       // se borra la llegada anterior, que era la de la cita que no se cumplio.
       pedido.estado = 'PROGRAMADO';
       pedido.fechaHoraLlegadaReal = undefined;
+      // La puntualidad se borra junto con la llegada: medía el cumplimiento
+      // de la cita anterior, y la cita anterior ya no existe. Dejarla pegada
+      // le atribuiria al proveedor una falta de una cita que fue reemplazada.
+      pedido.puntualidad = undefined;
       pedido.usuarioActualizacion = usuarioActualizacion;
 
       await pedido.save();
@@ -571,6 +587,24 @@ export const reprogramarPedido = async (req: Request, res: Response): Promise<vo
     }
 
     await resultado.pedido.populate('proveedorId');
+
+    // El evento va FUERA de ejecutarEnSerie, no adentro: esa cola existe para
+    // que el chequeo de solapamiento y el guardado no se intercalen con otra
+    // reprogramacion, y registrar la bitacora no necesita esa exclusion.
+    // Metido adentro solo alargaria la cola que todas las altas comparten.
+    await registrarEvento(req, 'CITA_REPROGRAMADA', {
+      pedidoId: resultado.pedido._id,
+      detalles: {
+        numeroPedido: resultado.pedido.numeroPedido,
+        ventanaAnterior,
+        ventanaNueva: {
+          inicioVentana: resultado.pedido.inicioVentana,
+          finVentana: resultado.pedido.finVentana,
+          duracionEstimadaMinutos: resultado.pedido.duracionEstimadaMinutos,
+          estado: resultado.pedido.estado
+        }
+      }
+    });
 
     res.status(200).json({ mensaje: 'Pedido reprogramado', pedido: resultado.pedido });
   } catch (error) {
