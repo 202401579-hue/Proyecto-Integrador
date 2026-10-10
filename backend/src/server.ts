@@ -9,6 +9,7 @@ import parametroRoutes from './routes/parametroRoutes';
 import llegadaRoutes from './routes/llegadaRoutes';
 import gatewayRoutes from './routes/gatewayRoutes';
 import descargaRoutes from './routes/descargaRoutes';
+import eventoRoutes from './routes/eventoRoutes';
 
 // Carga las variables de entorno antes que cualquier otra cosa,
 // porque la conexion a Mongo y la firma del JWT dependen de ellas.
@@ -45,6 +46,9 @@ app.use('/api/gateways', gatewayRoutes);
 
 // Rutas del registro de descargas (HU-03): iniciar, finalizar y activas
 app.use('/api/descargas', descargaRoutes);
+
+// Bitacora de eventos (RN-14): solo lectura, para supervision
+app.use('/api/eventos', eventoRoutes);
 
 // Ruta de verificacion: sirve para comprobar que el servidor esta arriba.
 app.get('/api/health', (_req: Request, res: Response) => {
