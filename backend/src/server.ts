@@ -10,6 +10,7 @@ import llegadaRoutes from './routes/llegadaRoutes';
 import gatewayRoutes from './routes/gatewayRoutes';
 import descargaRoutes from './routes/descargaRoutes';
 import eventoRoutes from './routes/eventoRoutes';
+import kpiRoutes from './routes/kpiRoutes';
 
 // Carga las variables de entorno antes que cualquier otra cosa,
 // porque la conexion a Mongo y la firma del JWT dependen de ellas.
@@ -49,6 +50,10 @@ app.use('/api/descargas', descargaRoutes);
 
 // Bitacora de eventos (RN-14): solo lectura, para supervision
 app.use('/api/eventos', eventoRoutes);
+
+// Indicadores logisticos del dashboard (Sprint 4): solo lectura, para
+// Administrador y Coordinador
+app.use('/api/kpis', kpiRoutes);
 
 // Ruta de verificacion: sirve para comprobar que el servidor esta arriba.
 app.get('/api/health', (_req: Request, res: Response) => {
