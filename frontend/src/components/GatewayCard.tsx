@@ -7,6 +7,8 @@ import { fondoGateway, type Descarga, type Gateway } from "@/lib/estadosGateway"
 const AZUL = "#2f5fb3";
 const ROJO_OSCURO = "#9b2c25";
 const PIZARRA = "#4a5361";
+// El mismo celeste del badge "Automática" de la bitácora y del aviso de asignación.
+const CELESTE = "#0dcaf0";
 
 interface GatewayCardProps {
   gateway: Gateway;
@@ -19,6 +21,9 @@ interface GatewayCardProps {
   // Hay una petición en curso sobre esta puerta: se bloquean los botones.
   ocupadaEnAccion: boolean;
   seleccionada: boolean;
+  // Recibió un camión por la promoción automática de la cola hace instantes:
+  // se resalta y su botón "Finalizar" queda bloqueado unos segundos.
+  asignadoAutomatico?: boolean;
   onIniciar: () => void;
   onCancelarSeleccion: () => void;
   onFinalizar: () => void;
@@ -80,6 +85,7 @@ export default function GatewayCard({
   ahora,
   ocupadaEnAccion,
   seleccionada,
+  asignadoAutomatico = false,
   onIniciar,
   onCancelarSeleccion,
   onFinalizar,
@@ -100,7 +106,11 @@ export default function GatewayCard({
           height: 270,
           borderRadius: "14px 14px 0 0",
           background: fondoGateway(estado),
-          boxShadow: seleccionada ? `0 0 0 4px #ffffff, 0 0 0 7px ${AZUL}` : "none",
+          boxShadow: asignadoAutomatico
+            ? `0 0 0 4px #ffffff, 0 0 0 7px ${CELESTE}`
+            : seleccionada
+              ? `0 0 0 4px #ffffff, 0 0 0 7px ${AZUL}`
+              : "none",
           transition: "box-shadow 0.15s ease",
         }}
       >
@@ -201,7 +211,20 @@ export default function GatewayCard({
         </button>
       )}
 
-      {esCoordinador && estado === "OCUPADO" && descarga && (
+      {esCoordinador && estado === "OCUPADO" && asignadoAutomatico && (
+        <div
+          className="small fw-semibold text-center d-flex align-items-center justify-content-center gap-2 rounded"
+          style={{ background: CELESTE, color: "#1f2a44", minHeight: 44 }}
+          role="status"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.7L4 15.5M4 20v-4.5h4.5" />
+          </svg>
+          Asignado automáticamente
+        </div>
+      )}
+
+      {esCoordinador && estado === "OCUPADO" && descarga && !asignadoAutomatico && (
         <button
           type="button"
           className="btn btn-sm fw-semibold"
