@@ -2,9 +2,11 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { conectarDB } from '../config/database';
 import Proveedor from '../models/Proveedor';
-import Pedido, { IPedido } from '../models/Pedido';
+import Pedido, { IPedido, Puntualidad } from '../models/Pedido';
 import Descarga from '../models/Descarga';
 import Gateway from '../models/Gateway';
+import Evento from '../models/Evento';
+import Usuario from '../models/Usuario';
 import { HorarioOperativo, calcularVentana, esDiaHabil } from '../services/ventanaHoraria';
 import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
 import { generarNumeroPedido } from '../services/numeroPedido';
@@ -305,24 +307,31 @@ const sembrar = async (): Promise<void> => {
   );
 
   // ---------------------------------------------------------------------
-  // Pedidos ya llegados, para la demo de descargas (HU-03). Se insertan
-  // directamente con estado A TIEMPO y fechaHoraLlegadaReal, sin depender
-  // del reloj: asi no importa a que hora del dia se haga la demo, siempre
-  // hay pedidos listos para iniciar una descarga. Sus ventanas (13:00,
-  // 14:00 y 15:00 del mismo dia del bloqueador) no se solapan con el
-  // bloqueador (09:00-10:00) ni entre si.
+  // Pedidos ya llegados, para la demo de descargas y de la cola (HU-03,
+  // Sprint 4). Se insertan directamente con estado EN COLA, puntualidad
+  // cargada y fechaHoraLlegadaReal, sin depender del reloj: asi no importa
+  // a que hora del dia se haga la demo, siempre hay pedidos esperando
+  // bahia. Antes del Sprint 4 este bloque los dejaba en estado "A TIEMPO"
+  // sin puntualidad, que es el formato viejo (ver guia, Prioridad 2).
+  //
+  // Van al menos tres "general" y uno de "construccion": con tres general
+  // en la cola, al finalizar una descarga en un gateway general siempre
+  // queda otro pedido general esperando para que se vea la promocion
+  // automatica. Sus ventanas (11:00 a 15:00 del mismo dia del bloqueador)
+  // no se solapan con el bloqueador (09:00-10:00) ni entre si.
   const proveedorGeneral = proveedores[1];
   const proveedorConstruccion = proveedores[0];
 
   const pedidosLlegados = [
-    { hora: 13, tipoProducto: 'general' as const, proveedor: proveedorGeneral },
-    { hora: 14, tipoProducto: 'general' as const, proveedor: proveedorGeneral },
-    { hora: 15, tipoProducto: 'construcción' as const, proveedor: proveedorConstruccion }
+    { hora: 11, tipoProducto: 'general' as const, proveedor: proveedorGeneral, puntualidad: 'A TIEMPO' as const },
+    { hora: 12, tipoProducto: 'general' as const, proveedor: proveedorGeneral, puntualidad: 'ANTICIPADO' as const },
+    { hora: 13, tipoProducto: 'general' as const, proveedor: proveedorGeneral, puntualidad: 'A TIEMPO' as const },
+    { hora: 15, tipoProducto: 'construcción' as const, proveedor: proveedorConstruccion, puntualidad: 'A TIEMPO' as const }
   ];
 
   const llegadosCreados: IPedido[] = [];
 
-  for (const { hora, tipoProducto, proveedor } of pedidosLlegados) {
+  for (const { hora, tipoProducto, proveedor, puntualidad } of pedidosLlegados) {
     const horaLlegada = new Date(ventana.inicio.getTime());
     horaLlegada.setHours(hora, 0, 0, 0);
 
@@ -336,7 +345,11 @@ const sembrar = async (): Promise<void> => {
       duracionEstimadaMinutos: DURACION_LLEGADO_MINUTOS,
       inicioVentana: ventanaLlegado.inicio,
       finVentana: ventanaLlegado.fin,
-      estado: 'A TIEMPO',
+      // Desde el Sprint 4 un pedido que llego queda EN COLA, no con la
+      // clasificacion puesta en el estado: la clasificacion vive en su
+      // propio campo puntualidad (ver models/Pedido.ts).
+      estado: 'EN COLA',
+      puntualidad,
       fechaHoraLlegadaReal: ventanaLlegado.inicio,
       usuarioCreacion: USUARIO_SEED
     });
@@ -344,16 +357,253 @@ const sembrar = async (): Promise<void> => {
     llegadosCreados.push(pedido);
   }
 
-  console.log('[Seed demo] Pedidos ya llegados, listos para iniciar una descarga:');
+  console.log('[Seed demo] Pedidos ya llegados, en EN COLA y listos para iniciar una descarga:');
   llegadosCreados.forEach((pedido) => {
     console.log(
       `  - ${pedido.numeroPedido}  ${pedido.tipoProducto.padEnd(12)}  ` +
-        `${horaCorta(pedido.inicioVentana)}  (${pedido.estado})`
+        `${horaCorta(pedido.inicioVentana)}  (${pedido.estado}, ${pedido.puntualidad})`
     );
   });
   console.log(
-    '[Seed demo] Usarlos en POST /api/descargas/iniciar: los dos "general" van en los ' +
-      'gateways 1 a 4, el de "construcción" solo en el gateway 5.'
+    '[Seed demo] Usarlos en POST /api/descargas/iniciar: los tres "general" van en los ' +
+      'gateways 1 a 4, el de "construcción" solo en el gateway 5. Al finalizar una descarga ' +
+      'en un gateway general, otro pedido "general" de esta lista se promueve solo.'
+  );
+
+  // ---------------------------------------------------------------------
+  // Historial de los ultimos 7 dias, para el dashboard de KPIs (Sprint 4,
+  // Prioridad 2). Sin esto, GET /api/kpis existe pero todos los indicadores
+  // salen en cero: no hay ninguna descarga finalizada en el periodo por
+  // defecto. Se inserta directamente, igual que el resto de este script:
+  // son pedidos FINALIZADO con su descarga ya terminada, repartidos en los
+  // cinco gateways, respetando RN-07/RN-08 (construccion solo en el 5).
+  // ---------------------------------------------------------------------
+  console.log('[Seed demo] Generando historial de KPIs...');
+
+  // Los eventos no se pueden borrar con deleteMany() normal: el modelo
+  // bloquea esa operacion porque la bitacora es de solo insercion (RN-14).
+  // collection.deleteMany() esquiva a Mongoose por completo y existe solo
+  // para esto: reiniciar la coleccion en un seed de desarrollo.
+  const eventosBorrados = await Evento.collection.deleteMany({});
+  console.log(`[Seed demo] Eventos eliminados: ${eventosBorrados.deletedCount}`);
+
+  const coordinadorSeed = await Usuario.findOne({ correo: 'coordinador@logistica.com' });
+  const operadorSeed = await Usuario.findOne({ correo: 'operador@logistica.com' });
+
+  if (!coordinadorSeed || !operadorSeed) {
+    throw new Error(
+      'Faltan los usuarios del seed (coordinador@logistica.com / operador@logistica.com). ' +
+        'Corré "npm run seed" antes de "npm run seed:demo".'
+    );
+  }
+
+  const gatewaysOrdenados = await Gateway.find({ activo: true }).sort({ numeroGateway: 1 });
+
+  if (gatewaysOrdenados.length === 0) {
+    throw new Error('No hay gateways. Corré "npm run seed:gateways" antes de "npm run seed:demo".');
+  }
+
+  // Cuantos dias hacia atras cubre el historial: el mismo numero que usa
+  // por defecto GET /api/kpis, para que el dashboard muestre algo sin que
+  // haya que elegir un rango.
+  const DIAS_DE_HISTORIAL = 7;
+
+  /** "Hoy" en El Salvador, como AAAA-MM-DD (igual que kpiController.ts). */
+  const hoyEnElSalvadorTexto = (): string =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/El_Salvador',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+
+  /** Resta `dias` a una fecha AAAA-MM-DD, trabajando solo con el calendario. */
+  const restarDias = (fecha: string, dias: number): string => {
+    const fechaUtc = new Date(`${fecha}T00:00:00.000Z`);
+    fechaUtc.setUTCDate(fechaUtc.getUTCDate() - dias);
+    return fechaUtc.toISOString().slice(0, 10);
+  };
+
+  /**
+   * Fecha y hora exacta en El Salvador (UTC-6, sin horario de verano), sin
+   * depender de la zona horaria del servidor que corre este script: se
+   * escribe el offset explicito en el string ISO, igual que en
+   * kpiController.ts.
+   */
+  const fechaElSalvador = (diaTexto: string, hora: number, minuto = 0): Date =>
+    new Date(`${diaTexto}T${dosDigitos(hora)}:${dosDigitos(minuto)}:00.000-06:00`);
+
+  const hoyTexto = hoyEnElSalvadorTexto();
+
+  // Puntualidades de los pedidos que si llegaron y descargaron: mayoria A
+  // TIEMPO, con algunos ANTICIPADO y TARDÍO (los AUSENTE del historial se
+  // insertan aparte, mas abajo, porque esos nunca llegan ni descargan).
+  const PUNTUALIDADES_HISTORIAL: Puntualidad[] = ['A TIEMPO', 'A TIEMPO', 'A TIEMPO', 'ANTICIPADO', 'TARDÍO'];
+
+  let contadorHistorial = 0;
+  let pedidosHistorialCreados = 0;
+  let eventosHistorialCreados = 0;
+
+  for (let diasAtras = DIAS_DE_HISTORIAL - 1; diasAtras >= 0; diasAtras--) {
+    const diaTexto = restarDias(hoyTexto, diasAtras);
+
+    for (const gatewayHistorial of gatewaysOrdenados) {
+      const esConstruccion = gatewayHistorial.tipoCargaPermitida === 'construcción';
+      const proveedorHistorial = esConstruccion ? proveedorConstruccion : proveedorGeneral;
+
+      // Cada gateway atiende un pedido por dia, en una hora distinta segun
+      // su numero: alcanza para que no choquen entre si (la condicion real
+      // es que no se solapen DOS descargas del MISMO gateway, y cada uno
+      // tiene una sola por dia en este historial).
+      const horaLlegada = horario.horaApertura + 1 + (gatewayHistorial.numeroGateway % 3);
+      const puntualidadHistorial = PUNTUALIDADES_HISTORIAL[contadorHistorial % PUNTUALIDADES_HISTORIAL.length];
+      contadorHistorial += 1;
+
+      // Desfase de la llegada real respecto de la ventana, coherente con la
+      // puntualidad que le toco (ver services/puntualidad.ts): negativo si
+      // llego antes, positivo si llego despues, cero si llego justo a tiempo.
+      const desfaseMinutos =
+        puntualidadHistorial === 'ANTICIPADO'
+          ? -(tolerancias.anticipadoMinutos + 10)
+          : puntualidadHistorial === 'TARDÍO'
+            ? tolerancias.tardioMinutos + 5
+            : 0;
+
+      // Las de construccion duran mas, para que el comparativo de
+      // tiempoDescarga diga algo.
+      const duracionEstimadaHistorial = esConstruccion ? 90 : 40;
+      const duracionRealHistorial = esConstruccion ? duracionEstimadaHistorial + 20 : duracionEstimadaHistorial - 5;
+      const esperaMinutos = 10 + (gatewayHistorial.numeroGateway % 4) * 5;
+
+      const ventanaHistorial = calcularVentana(
+        fechaElSalvador(diaTexto, horaLlegada),
+        duracionEstimadaHistorial
+      );
+      const llegadaRealHistorial = new Date(ventanaHistorial.inicio.getTime() + desfaseMinutos * 60 * 1000);
+      const fechaHoraInicioHistorial = new Date(llegadaRealHistorial.getTime() + esperaMinutos * 60 * 1000);
+      const fechaHoraFinHistorial = new Date(
+        fechaHoraInicioHistorial.getTime() + duracionRealHistorial * 60 * 1000
+      );
+
+      const pedidoHistorial = await Pedido.create({
+        numeroPedido: await generarNumeroPedido(numeroEquipo),
+        proveedorId: proveedorHistorial._id,
+        tipoProducto: gatewayHistorial.tipoCargaPermitida,
+        fechaHoraProgramada: ventanaHistorial.inicio,
+        duracionEstimadaMinutos: duracionEstimadaHistorial,
+        inicioVentana: ventanaHistorial.inicio,
+        finVentana: ventanaHistorial.fin,
+        estado: 'FINALIZADO',
+        puntualidad: puntualidadHistorial,
+        fechaHoraLlegadaReal: llegadaRealHistorial,
+        usuarioCreacion: USUARIO_SEED
+      });
+
+      const descargaHistorial = await Descarga.create({
+        gatewayId: gatewayHistorial._id,
+        pedidoId: pedidoHistorial._id,
+        operadorId: operadorSeed._id,
+        fechaHoraInicio: fechaHoraInicioHistorial,
+        fechaHoraFin: fechaHoraFinHistorial,
+        duracionMinutos: duracionRealHistorial,
+        usuarioCreacion: operadorSeed.nombre
+      });
+
+      pedidosHistorialCreados += 1;
+
+      // Los cuatro eventos que dispararia la operacion real (ver
+      // llegadaController.ts y services/descargas.ts), con la fecha de
+      // cada hecho y no la de ahora: asi la bitacora cuenta la misma
+      // historia que miden los indicadores.
+      const detallesComunesHistorial = {
+        numeroGateway: gatewayHistorial.numeroGateway,
+        numeroPedido: pedidoHistorial.numeroPedido,
+        tipoCarga: gatewayHistorial.tipoCargaPermitida,
+        automatica: false
+      };
+
+      await Evento.create({
+        usuarioId: operadorSeed._id,
+        pedidoId: pedidoHistorial._id,
+        accion: 'LLEGADA_REGISTRADA',
+        detalles: {
+          numeroPedido: pedidoHistorial.numeroPedido,
+          puntualidad: puntualidadHistorial,
+          minutosDeDiferencia: desfaseMinutos,
+          inicioVentana: ventanaHistorial.inicio
+        },
+        fechaHora: llegadaRealHistorial,
+        usuarioCreacion: operadorSeed.nombre
+      });
+
+      await Evento.create({
+        usuarioId: coordinadorSeed._id,
+        pedidoId: pedidoHistorial._id,
+        accion: 'GATEWAY_ASIGNADO',
+        detalles: { ...detallesComunesHistorial, estadoAnteriorDelPedido: 'EN COLA' },
+        fechaHora: fechaHoraInicioHistorial,
+        usuarioCreacion: coordinadorSeed.nombre
+      });
+
+      await Evento.create({
+        usuarioId: coordinadorSeed._id,
+        pedidoId: pedidoHistorial._id,
+        accion: 'DESCARGA_INICIADA',
+        detalles: { ...detallesComunesHistorial, descargaId: String(descargaHistorial._id) },
+        fechaHora: fechaHoraInicioHistorial,
+        usuarioCreacion: coordinadorSeed.nombre
+      });
+
+      await Evento.create({
+        usuarioId: coordinadorSeed._id,
+        pedidoId: pedidoHistorial._id,
+        accion: 'DESCARGA_FINALIZADA',
+        detalles: {
+          numeroGateway: gatewayHistorial.numeroGateway,
+          numeroPedido: pedidoHistorial.numeroPedido,
+          duracionMinutos: duracionRealHistorial,
+          descargaId: String(descargaHistorial._id)
+        },
+        fechaHora: fechaHoraFinHistorial,
+        usuarioCreacion: coordinadorSeed.nombre
+      });
+
+      eventosHistorialCreados += 4;
+    }
+  }
+
+  // Algunos AUSENTE en el historial: nunca llegaron, asi que no tienen
+  // descarga ni evento de llegada (no hay nada que registrar de un camion
+  // que no aparecio). Cuentan igual para el cumplimiento, que mide sobre
+  // inicioVentana y no sobre si hubo descarga.
+  const DIAS_CON_AUSENTE_HISTORIAL = [1, 3, 5];
+  let ausentesHistorialCreados = 0;
+
+  for (const diasAtras of DIAS_CON_AUSENTE_HISTORIAL) {
+    const diaTexto = restarDias(hoyTexto, diasAtras);
+    const ventanaAusente = calcularVentana(fechaElSalvador(diaTexto, horario.horaCierre - 2), 30);
+
+    await Pedido.create({
+      numeroPedido: await generarNumeroPedido(numeroEquipo),
+      proveedorId: proveedorGeneral._id,
+      tipoProducto: 'general',
+      fechaHoraProgramada: ventanaAusente.inicio,
+      duracionEstimadaMinutos: 30,
+      inicioVentana: ventanaAusente.inicio,
+      finVentana: ventanaAusente.fin,
+      estado: 'AUSENTE',
+      puntualidad: 'AUSENTE',
+      usuarioCreacion: USUARIO_SEED,
+      usuarioActualizacion: 'Sistema (control de ausencias)'
+    });
+
+    ausentesHistorialCreados += 1;
+  }
+
+  console.log(
+    `[Seed demo] Historial de KPIs: ${pedidosHistorialCreados} pedidos FINALIZADO con su descarga, ` +
+      `${ausentesHistorialCreados} AUSENTE, ${eventosHistorialCreados} eventos ` +
+      `(últimos ${DIAS_DE_HISTORIAL} días, hora de El Salvador: ${restarDias(hoyTexto, DIAS_DE_HISTORIAL - 1)} a ${hoyTexto}).`
   );
 
   await mongoose.disconnect();
