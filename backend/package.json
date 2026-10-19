@@ -7,6 +7,9 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "test": "jest",
+    "test:cov": "jest --coverage",
+    "test:funcional": "ts-node-dev --transpile-only src/pruebas/ejecutar.ts",
     "seed": "ts-node-dev --transpile-only src/scripts/seed.ts",
     "seed:parametros": "ts-node-dev --transpile-only src/scripts/seedParametros.ts",
     "seed:gateways": "ts-node-dev --transpile-only src/scripts/seedGateways.ts",
@@ -27,8 +30,12 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.2",
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.1.4",
+    "ts-jest": "^29.2.5",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   }
