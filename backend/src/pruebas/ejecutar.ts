@@ -14,9 +14,11 @@ import {
 import { casosDeLlegadas } from './casos-llegadas';
 import { casosDeGateways } from './casos-gateways';
 import { casosDeColaYCitas } from './casos-cola-citas';
+import { casosDeRbac } from './casos-rbac';
 
 /**
- * Corredor del banco de pruebas funcionales CP-01 a CP-12.
+ * Corredor del banco de pruebas: los 12 casos funcionales CP-01 a CP-12 y la
+ * prueba integral de control de acceso por roles PI-05.
  *
  * Requiere el backend corriendo (npm run dev) y MongoDB accesible. Antes de
  * cada caso limpia lo que dejó el anterior, para que el orden de ejecución no
@@ -26,7 +28,7 @@ import { casosDeColaYCitas } from './casos-cola-citas';
  *   npm run test:funcional
  */
 
-const CASOS = [...casosDeLlegadas, ...casosDeGateways, ...casosDeColaYCitas];
+const CASOS = [...casosDeLlegadas, ...casosDeGateways, ...casosDeColaYCitas, ...casosDeRbac];
 
 const main = async (): Promise<void> => {
   process.stdout.write('\n' + '='.repeat(72) + '\n');
