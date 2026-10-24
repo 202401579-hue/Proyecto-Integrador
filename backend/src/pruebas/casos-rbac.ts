@@ -40,7 +40,15 @@ const MATRIZ: Regla[] = [
   { metodo: 'GET', ruta: '/api/descargas/activas', permitidos: ['admin', 'coordinador'] },
   { metodo: 'POST', ruta: '/api/descargas/iniciar', permitidos: ['coordinador', 'operador'] },
   { metodo: 'POST', ruta: '/api/llegadas', permitidos: ['coordinador', 'operador'] },
-  { metodo: 'POST', ruta: '/api/llegadas/control-ausencias', permitidos: ['admin', 'coordinador'] }
+  { metodo: 'POST', ruta: '/api/llegadas/control-ausencias', permitidos: ['admin', 'coordinador'] },
+  // Sprint 5: la administracion de usuarios es exclusiva del Administrador.
+  // Es el modulo que decide quien entra al sistema y con que rol, asi que
+  // que un Coordinador no lo alcance es parte del control de acceso que
+  // este caso mide. Van GET y POST: todas las rutas del modulo comparten el
+  // mismo router.use(verificarToken, autorizarRoles('Administrador')), asi
+  // que con dos alcanza para demostrar que el modulo entero esta cerrado.
+  { metodo: 'GET', ruta: '/api/usuarios', permitidos: ['admin'] },
+  { metodo: 'POST', ruta: '/api/usuarios', permitidos: ['admin'] }
 ];
 
 const ROLES: Rol[] = ['admin', 'coordinador', 'operador'];
@@ -111,6 +119,9 @@ export const casosDeRbac: DefinicionCaso[] = [
         `${denegados} denegadas con 403, sobre ${MATRIZ.length} endpoints y ${ROLES.length} roles.`);
       anotar('El Operador no alcanza ningún endpoint de administración ni de consulta de ' +
         'indicadores; el Administrador no registra llegadas ni inicia descargas.');
+      anotar('La administración de usuarios (/api/usuarios) solo la alcanza el ' +
+        'Administrador: ni el Coordinador ni el Operador pueden crear cuentas, ' +
+        'cambiar roles ni exigir la verificación en dos pasos.');
     }
   }
 ];

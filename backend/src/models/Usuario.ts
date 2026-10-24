@@ -112,10 +112,32 @@ const UsuarioSchema = new Schema<IUsuario>(
     // activo, usuarioCreacion y usuarioActualizacion (ver models/auditoria.ts)
     ...camposAuditoria()
   },
-  // Las fechas pasan a llamarse fechaCreacion y fechaActualizacion, como en
-  // el resto de las colecciones. Usuario era la unica que seguia con los
-  // nombres en ingles que pone Mongoose por defecto.
-  opcionesAuditoria
+  {
+    // Las fechas pasan a llamarse fechaCreacion y fechaActualizacion, como
+    // en el resto de las colecciones. Usuario era la unica que seguia con
+    // los nombres en ingles que pone Mongoose por defecto.
+    ...opcionesAuditoria,
+    // Red de seguridad para los tres campos secretos.
+    //
+    // El select: false ya hace que no vengan en una consulta comun, pero
+    // depende de que ninguna consulta los pida de mas. Este transform actua
+    // al convertir el documento a JSON, que es lo que hace res.json(), asi
+    // que cubre tambien el caso de un controlador que cargo el documento
+    // con +password para algo y despues lo devuelve entero por descuido.
+    //
+    // Son dos defensas para lo mismo a proposito: que el hash de la
+    // contrasena o el secreto del segundo factor salgan en una respuesta es
+    // de los errores mas caros que puede cometer este backend, y no deberia
+    // depender de que alguien se acuerde de filtrarlos en cada endpoint.
+    toJSON: {
+      transform: (_documento, objeto: Record<string, unknown>) => {
+        delete objeto.password;
+        delete objeto.twoFactorSecret;
+        delete objeto.twoFactorRecoveryCodes;
+        return objeto;
+      }
+    }
+  }
 );
 
 /**
