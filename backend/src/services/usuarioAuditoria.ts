@@ -8,7 +8,7 @@ import Usuario from '../models/Usuario';
  *
  * El JWT solo lleva id, correo y rol: el nombre no viaja en el token. Se
  * podria haber agregado al payload, pero eso obligaria a tocar el login y,
- * peor, el nombre quedaria congelado por 24 horas (lo que dura el token):
+ * peor, el nombre quedaria congelado mientras dure el token (ocho horas):
  * si el usuario corrige su nombre, la auditoria seguiria escribiendo el
  * viejo hasta que venza la sesion. Por eso se lee de la base en cada
  * escritura, con el id del token como referencia.

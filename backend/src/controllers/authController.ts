@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
 import Usuario from '../models/Usuario';
+import { firmarTokenDeAcceso, obtenerSecreto } from '../services/tokens';
 
 /**
  * POST /api/auth/login
  *
  * Recibe { correo, password }, valida las credenciales contra MongoDB
- * y devuelve { token } con un JWT firmado que expira en 24 horas.
+ * y devuelve { token } con un JWT firmado que expira en
+ * DURACION_TOKEN_ACCESO (ver services/tokens.ts).
  */
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -42,25 +43,22 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const secreto = process.env.JWT_SECRET;
+    const secreto = obtenerSecreto();
 
     if (!secreto) {
-      console.error('[Auth] Falta la variable JWT_SECRET en el archivo .env');
       res.status(500).json({ mensaje: 'Error interno del servidor' });
       return;
     }
 
-    // El payload lleva solo datos de identidad no sensibles.
-    // Nunca la contrasena ni el hash: el payload va en Base64URL,
-    // no cifrado, y cualquiera puede leerlo pegando el token en jwt.io.
-    const token = jwt.sign(
+    // La firma vive en services/tokens.ts: duracion y claims en un solo
+    // lugar, para los dos tipos de token que emite el sistema.
+    const token = firmarTokenDeAcceso(
       {
-        id: usuario._id,
+        id: String(usuario._id),
         correo: usuario.correo,
         rol: usuario.rol
       },
-      secreto,
-      { expiresIn: '24h' }
+      secreto
     );
 
     res.status(200).json({ token });
