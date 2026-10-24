@@ -1,13 +1,24 @@
 import { Request, Response } from 'express';
 import Usuario from '../models/Usuario';
-import { firmarTokenDeAcceso, obtenerSecreto } from '../services/tokens';
+import { decidirPasoDeLogin } from '../services/login';
+import { firmarTokenDeAcceso, firmarTokenTemporal, obtenerSecreto } from '../services/tokens';
 
 /**
  * POST /api/auth/login
  *
- * Recibe { correo, password }, valida las credenciales contra MongoDB
- * y devuelve { token } con un JWT firmado que expira en
- * DURACION_TOKEN_ACCESO (ver services/tokens.ts).
+ * Recibe { correo, password } y, segun el estado del segundo factor del
+ * usuario, devuelve una de estas TRES respuestas, todas con estado 200:
+ *
+ *   { token }                            sesion abierta, nada mas que hacer
+ *   { mfaRequired: true, tempToken }     falta escribir el codigo
+ *   { mfaSetupRequired: true, tempToken } falta configurar el autenticador
+ *
+ * El frontend tiene que mirar cual de las tres llego: guardar
+ * respuesta.token a ciegas, como se hacia hasta el Sprint 4, deja la
+ * sesion rota en silencio en los dos casos nuevos.
+ *
+ * La decision de cual corresponde esta en services/login.ts, en una
+ * funcion pura que se prueba sola.
  */
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -24,6 +35,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Se pide el password explicitamente porque el esquema lo marca
     // como select: false y no viene en las consultas normales.
+    // mfaObligatorio y twoFactorEnabled si vienen solos: no son secretos,
+    // y el secreto del autenticador no hace falta todavia.
     const usuario = await Usuario.findOne({
       correo: String(correo).toLowerCase().trim()
     }).select('+password');
@@ -43,6 +56,21 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // La baja se comprueba DESPUES de la contrasena, no antes. Si fuera al
+    // reves, cualquiera podria averiguar que cuentas estan dadas de baja
+    // probando correos sueltos; asi, solo se entera quien ya demostro ser
+    // el dueno de la cuenta, y para esa persona el aviso es util.
+    //
+    // Se compara contra false y no con un ! : en una base sembrada antes
+    // del Sprint 5 el campo todavia puede no existir, y con ! esos
+    // usuarios quedarian bloqueados sin que nadie los haya dado de baja.
+    if (usuario.activo === false) {
+      res.status(403).json({
+        mensaje: 'La cuenta está inactiva. Comuníquese con el administrador.'
+      });
+      return;
+    }
+
     const secreto = obtenerSecreto();
 
     if (!secreto) {
@@ -50,18 +78,41 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // La firma vive en services/tokens.ts: duracion y claims en un solo
-    // lugar, para los dos tipos de token que emite el sistema.
-    const token = firmarTokenDeAcceso(
-      {
-        id: String(usuario._id),
-        correo: usuario.correo,
-        rol: usuario.rol
-      },
-      secreto
-    );
+    const paso = decidirPasoDeLogin({
+      mfaObligatorio: usuario.mfaObligatorio,
+      twoFactorEnabled: usuario.twoFactorEnabled
+    });
 
-    res.status(200).json({ token });
+    // Sin segundo factor de por medio: el login termina aca, exactamente
+    // igual que antes del Sprint 5. Es lo que mantiene andando al frontend
+    // actual, al banco de pruebas funcionales y a la demostracion.
+    if (paso === 'ACCESO_DIRECTO') {
+      const token = firmarTokenDeAcceso(
+        {
+          id: String(usuario._id),
+          correo: usuario.correo,
+          rol: usuario.rol
+        },
+        secreto
+      );
+
+      res.status(200).json({ token });
+      return;
+    }
+
+    // Los otros dos casos entregan el token TEMPORAL. No abre ninguna ruta
+    // operativa (verificarToken lo rechaza con 403): solo sirve para
+    // alcanzar /api/mfa y /api/auth/mfa/verify-login, y dura cinco minutos.
+    const { token: tempToken } = firmarTokenTemporal(String(usuario._id), secreto);
+
+    if (paso === 'VERIFICAR_MFA') {
+      res.status(200).json({ mfaRequired: true, tempToken });
+      return;
+    }
+
+    // CONFIGURAR_MFA: el administrador le exige el segundo factor y el
+    // usuario todavia no lo armo. Entra al sistema solo para eso.
+    res.status(200).json({ mfaSetupRequired: true, tempToken });
   } catch (error) {
     console.error('[Auth] Error en el login:', (error as Error).message);
     res.status(500).json({ mensaje: 'Error interno del servidor' });
