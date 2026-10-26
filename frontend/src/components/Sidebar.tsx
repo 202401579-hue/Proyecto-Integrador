@@ -14,6 +14,7 @@ interface EnlaceSidebar {
 const ENLACES_POR_ROL: Record<Rol, EnlaceSidebar[]> = {
   Administrador: [
     { href: "/administrador", label: "Inicio", icono: "bi-house" },
+    { href: "/administrador/usuarios", label: "Usuarios", icono: "bi-people" },
     { href: "/administrador/parametros", label: "Parámetros", icono: "bi-sliders" },
     { href: "/administrador/gateways", label: "Gateways", icono: "bi-hdd-rack" },
     { href: "/administrador/indicadores", label: "Indicadores", icono: "bi-graph-up" },
