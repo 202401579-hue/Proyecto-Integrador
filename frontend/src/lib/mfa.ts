@@ -55,6 +55,11 @@ export function esCodigoTotp(codigo: string): boolean {
   return FORMATO_TOTP.test(codigo.trim());
 }
 
+/** Código de recuperación, de los ocho que se entregan al activar. */
+export function esCodigoDeRecuperacion(codigo: string): boolean {
+  return FORMATO_RECUPERACION.test(normalizarCodigo(codigo));
+}
+
 /** Código del autenticador o de recuperación: los dos entran al verificar. */
 export function esCodigoAceptable(codigo: string): boolean {
   const limpio = normalizarCodigo(codigo);
@@ -74,7 +79,7 @@ export function esCodigoAceptable(codigo: string): boolean {
  */
 export function segundosHastaExpirar(token: string): number {
   const payload = decodificarToken(token);
-  if (!payload?.exp) return 0;
+  if (typeof payload?.exp !== "number") return 0;
 
   return Math.max(0, Math.floor(payload.exp - Date.now() / 1000));
 }
@@ -97,7 +102,10 @@ export function comoRelojito(segundos: number): string {
 export type Resultado<T> =
   | { estado: "ok"; datos: T }
   | { estado: "rechazado"; mensaje: string; intentosRestantes?: number }
-  | { estado: "caida"; mensaje: string }
+  // `http` viaja para poder separar los dos motivos por los que hay que
+  // volver al login: 429 es "se agotaron los intentos" y 401 es "el token
+  // temporal venció". Los dos echan al usuario, pero no dicen lo mismo.
+  | { estado: "caida"; mensaje: string; http: number }
   | { estado: "falla"; mensaje: string };
 
 const MENSAJE_GENERICO = "Ocurrió un problema al verificar el código.";
@@ -143,13 +151,13 @@ export async function llamarConTokenTemporal<T>(
     // Se agotaron los cinco intentos de este token, o la cuenta quedó
     // inactiva mientras el usuario estaba en el segundo paso.
     if (respuesta.status === 429 || respuesta.status === 403) {
-      return { estado: "caida", mensaje };
+      return { estado: "caida", mensaje, http: respuesta.status };
     }
 
     if (respuesta.status === 401) {
       return typeof datos.intentosRestantes === "number"
         ? { estado: "rechazado", mensaje, intentosRestantes: datos.intentosRestantes }
-        : { estado: "caida", mensaje };
+        : { estado: "caida", mensaje, http: 401 };
     }
 
     // 400: formato del código, MFA ya activado, o sin secreto previo. Un
