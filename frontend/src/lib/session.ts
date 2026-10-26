@@ -21,6 +21,15 @@ export function obtenerToken(): string | null {
   return localStorage.getItem(CLAVE_TOKEN);
 }
 
+/**
+ * Guarda el token de acceso. Existe para que la clave "token" se escriba en
+ * un solo lugar: desde el Sprint 5 el login no es el único que abre sesión,
+ * también lo hace la verificación del segundo factor.
+ */
+export function guardarToken(token: string): void {
+  localStorage.setItem(CLAVE_TOKEN, token);
+}
+
 export function eliminarToken(): void {
   localStorage.removeItem(CLAVE_TOKEN);
 }

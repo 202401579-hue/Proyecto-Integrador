@@ -55,10 +55,8 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
 
   return (
     <SesionProvider sesion={sesion}>
-      <link
-        rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
-      />
+      {/* La hoja de iconos se carga en el layout raíz, que ahora la necesitan
+          también las pantallas del segundo factor en el login. */}
       <Script
         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         strategy="afterInteractive"
