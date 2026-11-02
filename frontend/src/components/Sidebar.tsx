@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { eliminarToken, Rol } from "@/lib/session";
+import { cerrarSesion, Rol } from "@/lib/session";
 
 interface EnlaceSidebar {
   href: string;
@@ -14,6 +14,7 @@ interface EnlaceSidebar {
 const ENLACES_POR_ROL: Record<Rol, EnlaceSidebar[]> = {
   Administrador: [
     { href: "/administrador", label: "Inicio", icono: "bi-house" },
+    { href: "/administrador/usuarios", label: "Usuarios", icono: "bi-people" },
     { href: "/administrador/parametros", label: "Parámetros", icono: "bi-sliders" },
     { href: "/administrador/gateways", label: "Gateways", icono: "bi-hdd-rack" },
     { href: "/administrador/indicadores", label: "Indicadores", icono: "bi-graph-up" },
@@ -47,7 +48,8 @@ export default function Sidebar({ rol }: SidebarProps) {
   const pathname = usePathname();
 
   function manejarLogout() {
-    eliminarToken();
+    // Borra el token de acceso y también el temporal del segundo factor.
+    cerrarSesion();
     router.replace("/login");
   }
 

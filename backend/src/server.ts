@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { conectarDB } from './config/database';
 import authRoutes from './routes/authRoutes';
+import mfaRoutes from './routes/mfaRoutes';
+import usuarioRoutes from './routes/usuarioRoutes';
 import proveedorRoutes from './routes/proveedorRoutes';
 import pedidoRoutes from './routes/pedidoRoutes';
 import parametroRoutes from './routes/parametroRoutes';
@@ -29,6 +31,14 @@ app.use(express.json());
 
 // Rutas de autenticacion: POST /api/auth/login
 app.use('/api/auth', authRoutes);
+
+// Rutas de configuracion del segundo factor (Sprint 5). Se entra con el
+// token temporal del login, no con el de acceso.
+app.use('/api/mfa', mfaRoutes);
+
+// Administracion de usuarios (Sprint 5): alta, baja, roles y exigencia
+// del segundo factor. Solo para el rol Administrador.
+app.use('/api/usuarios', usuarioRoutes);
 
 // Rutas del modulo de proveedores (rol Coordinador)
 app.use('/api/proveedores', proveedorRoutes);

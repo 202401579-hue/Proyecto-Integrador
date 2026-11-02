@@ -1,12 +1,22 @@
 import { Router, Request, Response } from 'express';
 import { login } from '../controllers/authController';
+import { verificarLoginConMfa } from '../controllers/mfaController';
 import { verificarToken } from '../middlewares/verificarToken';
+import { verifyTempToken } from '../middlewares/verifyTempToken';
 import { autorizarRoles } from '../middlewares/autorizarRoles';
 
 const router = Router();
 
 // POST /api/auth/login  (el prefijo /api/auth se monta en server.ts)
 router.post('/login', login);
+
+// POST /api/auth/mfa/verify-login
+//
+// Segundo paso del login. Vive aca y no en mfaRoutes porque es parte del
+// inicio de sesion, no de la configuracion del factor: es el endpoint que
+// termina de abrir la sesion y entrega el token definitivo. La ruta es la
+// que fija el enunciado.
+router.post('/mfa/verify-login', verifyTempToken, verificarLoginConMfa);
 
 // ---------------------------------------------------------------------------
 // Rutas de demostracion del RBAC.

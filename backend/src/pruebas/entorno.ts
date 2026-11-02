@@ -160,7 +160,7 @@ export const imprimirResumen = (): boolean => {
   const total = resultados.length;
 
   process.stdout.write('\n' + '='.repeat(72) + '\n');
-  process.stdout.write('RESUMEN DE PRUEBAS FUNCIONALES — SumaControl (Grupo N.º 1)\n');
+  process.stdout.write('RESUMEN DE PRUEBAS FUNCIONALES E INTEGRALES — SumaControl (Grupo N.º 1)\n');
   process.stdout.write('='.repeat(72) + '\n');
 
   for (const r of resultados) {
