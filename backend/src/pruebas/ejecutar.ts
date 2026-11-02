@@ -15,10 +15,11 @@ import { casosDeLlegadas } from './casos-llegadas';
 import { casosDeGateways } from './casos-gateways';
 import { casosDeColaYCitas } from './casos-cola-citas';
 import { casosDeRbac } from './casos-rbac';
+import { casosE2E } from './casos-e2e';
 
 /**
- * Corredor del banco de pruebas: los 12 casos funcionales CP-01 a CP-12 y la
- * prueba integral de control de acceso por roles PI-05.
+ * Corredor del banco de pruebas: los 12 casos funcionales CP-01 a CP-12 y las
+ * cinco pruebas integrales PI-01 a PI-05.
  *
  * Requiere el backend corriendo (npm run dev) y MongoDB accesible. Antes de
  * cada caso limpia lo que dejó el anterior, para que el orden de ejecución no
@@ -28,11 +29,17 @@ import { casosDeRbac } from './casos-rbac';
  *   npm run test:funcional
  */
 
-const CASOS = [...casosDeLlegadas, ...casosDeGateways, ...casosDeColaYCitas, ...casosDeRbac];
+const CASOS = [
+  ...casosDeLlegadas,
+  ...casosDeGateways,
+  ...casosDeColaYCitas,
+  ...casosE2E,
+  ...casosDeRbac
+];
 
 const main = async (): Promise<void> => {
   process.stdout.write('\n' + '='.repeat(72) + '\n');
-  process.stdout.write('PRUEBAS FUNCIONALES — SumaControl (Grupo N.º 1)\n');
+  process.stdout.write('PRUEBAS FUNCIONALES E INTEGRALES — SumaControl (Grupo N.º 1)\n');
   process.stdout.write(`API bajo prueba: ${BASE_URL}\n`);
   process.stdout.write('='.repeat(72) + '\n');
 
