@@ -70,7 +70,7 @@ export default function CasetaDeArribosPage() {
           <input
             id="numeroPedido"
             className="form-control form-control-lg"
-            placeholder="OC-2026-0010"
+            placeholder="PED-EQUI04-000000006"
             required
             autoFocus
             value={numeroPedido}
