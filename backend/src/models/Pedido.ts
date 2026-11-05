@@ -116,6 +116,28 @@ export interface IPedido extends Document, CamposAuditoria {
    * pedido no registre llegada.
    */
   fechaHoraLlegadaReal?: Date;
+  /**
+   * Momento en que el pedido entro a la cola de espera (Sprint 6). Hoy
+   * coincide siempre con fechaHoraLlegadaReal (el control de arribos pone
+   * las dos al mismo tiempo), pero se guarda aparte porque la cola la
+   * necesita con ese nombre y porque un pedido podria volver a entrar a la
+   * cola sin volver a "llegar" (por ejemplo, si algun dia se agrega una
+   * reasignacion manual).
+   */
+  fechaHoraIngresoCola?: Date;
+  /**
+   * Minutos que el pedido lleva esperando en la cola, calculados la ultima
+   * vez que se reevaluo (ver services/cola.ts). No se recalcula en cada
+   * lectura: lo pisa reevaluarCola().
+   */
+  minutosEnEspera?: number;
+  /**
+   * Prioridad calculada para ordenar la cola (base por puntualidad +
+   * envejecimiento por espera, ver cola/prioridad.ts). La guarda
+   * reevaluarCola() para que el AGING_APLICADO de la bitacora pueda comparar
+   * la prioridad anterior contra la nueva.
+   */
+  prioridadCalculada?: number;
 }
 
 const PedidoSchema = new Schema<IPedido>(
@@ -189,6 +211,19 @@ const PedidoSchema = new Schema<IPedido>(
     // que el camion exista, y la hora la pone el servidor al registrarla.
     fechaHoraLlegadaReal: {
       type: Date
+    },
+    // Sprint 6 — cola con prioridad. Ninguno de los tres es obligatorio para
+    // no romper los documentos que ya existen en la base: un pedido viejo
+    // simplemente no tiene cola calculada todavia.
+    fechaHoraIngresoCola: {
+      type: Date
+    },
+    minutosEnEspera: {
+      type: Number,
+      default: 0
+    },
+    prioridadCalculada: {
+      type: Number
     },
     // activo, usuarioCreacion y usuarioActualizacion (ver models/auditoria.ts)
     ...camposAuditoria()

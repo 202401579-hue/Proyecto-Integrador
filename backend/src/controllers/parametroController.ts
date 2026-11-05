@@ -3,9 +3,42 @@ import Parametro, { IParametro } from '../models/Parametro';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { filtroActivos } from '../services/borradoLogico';
 import { respondioErrorDeEscritura, respondioIdInvalido } from '../services/respuestasError';
-import { invalidarConfiguracionOperativa } from '../services/configuracionOperativa';
+import { CLAVES_PARAMETROS, invalidarConfiguracionOperativa } from '../services/configuracionOperativa';
 
 const MENSAJE_DUPLICADO = 'Ya existe un parámetro con esa clave';
+
+/**
+ * Claves cuyo valor tiene que ser un entero dentro de un rango. Son los
+ * parametros de la cola (Sprint 6): un valor fuera de rango (por ejemplo
+ * factor_aging_min en 0) rompe la division de calcularPrioridad() en
+ * cola/prioridad.ts, asi que se valida antes de llegar a la base.
+ *
+ * 1440 es la cantidad de minutos de un dia completo: no tiene sentido un
+ * aging o un limite de espera mas largo que eso.
+ */
+const RANGOS_ENTEROS: Record<string, { minimo: number; maximo: number }> = {
+  [CLAVES_PARAMETROS.factorAgingMin]: { minimo: 1, maximo: 1440 },
+  [CLAVES_PARAMETROS.limiteEsperaMax]: { minimo: 1, maximo: 1440 }
+};
+
+/**
+ * Valida que, si la clave final del parametro esta en RANGOS_ENTEROS, su
+ * valor sea un entero dentro del rango. Devuelve el mensaje de error, o null
+ * si no aplica ninguna regla o el valor es valido.
+ */
+const errorDeRangoEntero = (clave: string, valor: string): string | null => {
+  const rango = RANGOS_ENTEROS[clave];
+  if (!rango) {
+    return null;
+  }
+
+  const numero = Number(valor);
+  if (!Number.isInteger(numero) || numero < rango.minimo || numero > rango.maximo) {
+    return `El valor de ${clave} debe ser un entero entre ${rango.minimo} y ${rango.maximo}`;
+  }
+
+  return null;
+};
 
 /**
  * POST /api/parametros
@@ -94,6 +127,15 @@ export const actualizarParametro = async (req: Request, res: Response): Promise<
 
     if (valor !== undefined) {
       parametro.valor = valor;
+    }
+
+    // Se valida con la clave y el valor que va a quedar guardados (uno de
+    // los dos puede no venir en el body y seguir siendo el que ya tenia el
+    // documento), no con lo que llego crudo en la peticion.
+    const errorDeRango = errorDeRangoEntero(parametro.clave, parametro.valor);
+    if (errorDeRango) {
+      res.status(400).json({ mensaje: errorDeRango });
+      return;
     }
 
     if (descripcion !== undefined) {
