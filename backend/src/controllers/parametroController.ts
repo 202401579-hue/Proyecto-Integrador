@@ -49,6 +49,16 @@ export const crearParametro = async (req: Request, res: Response): Promise<void>
   try {
     const { clave, valor, descripcion } = req.body ?? {};
 
+    // La clave todavia no paso por el setter uppercase del esquema (eso
+    // ocurre al asignarla a un documento, y create() recien la crea): se
+    // normaliza aca nomas para que la validacion encuentre la misma clave
+    // con la que se guarda despues.
+    const errorDeRango = errorDeRangoEntero(String(clave ?? '').trim().toUpperCase(), valor);
+    if (errorDeRango) {
+      res.status(400).json({ mensaje: errorDeRango });
+      return;
+    }
+
     // Se arma el objeto campo por campo para que un cliente no pueda colar
     // propiedades extra (por ejemplo activo o fechaCreacion) en el documento.
     const parametro = await Parametro.create({

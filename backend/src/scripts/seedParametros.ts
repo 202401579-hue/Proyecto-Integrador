@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { conectarDB } from '../config/database';
 import Parametro from '../models/Parametro';
 import { CLAVES_PARAMETROS } from '../services/configuracionOperativa';
+import { sembrarParametrosCola } from './seedParametrosCola';
 
 dotenv.config();
 
@@ -60,30 +61,6 @@ const parametrosIniciales = [
   }
 ];
 
-/**
- * Parametros de la cola con prioridad (Sprint 6).
- *
- * Van por upsert y NO por el deleteMany+create de arriba: en la demo se van
- * a ajustar en vivo desde la pantalla de Parametros, y si este script se
- * vuelve a correr despues no tiene que pisar el valor que el usuario ya
- * dejo cargado. upsert con $setOnInsert deja el valor como esta si el
- * parametro ya existe, y lo crea con el valor inicial si todavia no existe.
- */
-const parametrosColaPorUpsert = [
-  {
-    clave: CLAVES_PARAMETROS.factorAgingMin,
-    valor: '20',
-    descripcion:
-      'Minutos de espera en la cola que suman un punto de prioridad por envejecimiento (entero, 1 a 1440)'
-  },
-  {
-    clave: CLAVES_PARAMETROS.limiteEsperaMax,
-    valor: '60',
-    descripcion:
-      'Minutos de espera en la cola a partir de los cuales el pedido se marca con alerta visual (entero, 1 a 1440)'
-  }
-];
-
 const sembrar = async (): Promise<void> => {
   await conectarDB();
 
@@ -113,20 +90,9 @@ const sembrar = async (): Promise<void> => {
     '[Seed parametros]              hasta 60 min (TARDIO); pasados los 60 min, AUSENTE.'
   );
 
-  // Upsert por clave: a diferencia del bloque de arriba, esto no borra nada.
-  for (const parametro of parametrosColaPorUpsert) {
-    const resultado = await Parametro.findOneAndUpdate(
-      { clave: parametro.clave },
-      {
-        $setOnInsert: {
-          ...parametro,
-          usuarioCreacion: USUARIO_SEED
-        }
-      },
-      { upsert: true, new: true, runValidators: true }
-    );
-    console.log(`[Seed parametros] (upsert) ${resultado.clave.padEnd(30)} ${resultado.valor}`);
-  }
+  // Parametros de la cola (Sprint 6): por upsert, no por el deleteMany+create
+  // de arriba (ver seedParametrosCola.ts para el por que).
+  await sembrarParametrosCola();
 
   await mongoose.disconnect();
   console.log('[Seed parametros] Listo.');
