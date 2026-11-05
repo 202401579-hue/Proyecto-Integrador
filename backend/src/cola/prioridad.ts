@@ -23,6 +23,17 @@ export const PRIORIDAD_BASE: Record<string, number> = {
 /** Base que se usa cuando la puntualidad no esta en PRIORIDAD_BASE (ver calcularPrioridad). */
 const PRIORIDAD_BASE_DESCONOCIDA = 1;
 
+/**
+ * Prioridad base de una puntualidad, sin el aging por espera.
+ *
+ * Se expone aparte de calcularPrioridad() porque construirCola.ts necesita
+ * mostrar la base y el total por separado (prioridadBase y
+ * prioridadCalculada), y los dos tienen que usar exactamente la misma regla
+ * de "no reconocida" para no desincronizarse.
+ */
+export const prioridadBaseDe = (puntualidad: string): number =>
+  PRIORIDAD_BASE[puntualidad] ?? PRIORIDAD_BASE_DESCONOCIDA;
+
 const MS_POR_MINUTO = 60 * 1000;
 
 /**
@@ -55,8 +66,7 @@ export const calcularPrioridad = (
     throw new Error('factorAgingMin debe ser mayor que 0');
   }
 
-  const base = PRIORIDAD_BASE[puntualidad] ?? PRIORIDAD_BASE_DESCONOCIDA;
-  return base + Math.floor(minutosEspera / factorAgingMin);
+  return prioridadBaseDe(puntualidad) + Math.floor(minutosEspera / factorAgingMin);
 };
 
 /** Lo que compararPedidosCola necesita de un pedido; no depende del modelo completo de Mongoose. */

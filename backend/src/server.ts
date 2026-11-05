@@ -13,6 +13,7 @@ import gatewayRoutes from './routes/gatewayRoutes';
 import descargaRoutes from './routes/descargaRoutes';
 import eventoRoutes from './routes/eventoRoutes';
 import kpiRoutes from './routes/kpiRoutes';
+import colaRoutes from './routes/colaRoutes';
 
 // Carga las variables de entorno antes que cualquier otra cosa,
 // porque la conexion a Mongo y la firma del JWT dependen de ellas.
@@ -64,6 +65,10 @@ app.use('/api/eventos', eventoRoutes);
 // Indicadores logisticos del dashboard (Sprint 4): solo lectura, para
 // Administrador y Coordinador
 app.use('/api/kpis', kpiRoutes);
+
+// Cola de descarga con prioridad (Sprint 6): GET de solo lectura y POST de
+// reevaluacion, para Administrador, Coordinador y Operador
+app.use('/api/cola', colaRoutes);
 
 // Ruta de verificacion: sirve para comprobar que el servidor esta arriba.
 app.get('/api/health', (_req: Request, res: Response) => {
