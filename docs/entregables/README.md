@@ -1,6 +1,6 @@
 # Entregables formales — Proyecto Integrador SumaControl
 
-Entregables formales de la asignatura **MDS 0 (Metodologías de Desarrollo de Software 0)**, ciclo **2-2026**, **Grupo N.º 1**.
+Entregables formales del **Proyecto Integrador SumaControl**, asignatura **MDS 0 (Metodologías de Desarrollo de Software 0)**, ciclo **2-2026**, **Grupo N.º 1**.
 
 | Documento | Contenido | Unidad didáctica | Archivo |
 |---|---|---|---|
@@ -11,4 +11,4 @@ Entregables formales de la asignatura **MDS 0 (Metodologías de Desarrollo de So
 
 ## Diagramas UML
 
-Los diagramas de casos de uso, clases y secuencia están versionados aparte, en PNG y `.drawio`: [docs/diagramas/](../diagramas/)
+Los diagramas de casos de uso, clases y secuencia están versionados aparte, editables en `.drawio` y exportados en PNG: [docs/diagramas/](../diagramas/)
