@@ -1,4 +1,4 @@
-import { elegirSiguiente, ordenarCola, PedidoEnCola } from '../cola/construirCola';
+import { candidatosParaGateway, elegirSiguiente, ordenarCola, PedidoEnCola } from '../cola/construirCola';
 
 /**
  * ordenarCola() y elegirSiguiente() — orden de la cola de descarga (Sprint 6).
@@ -11,6 +11,7 @@ const FACTOR_AGING = 20;
 
 /** Pedido base con todos los campos, para no repetirlos en cada caso. */
 const pedido = (datos: Partial<PedidoEnCola> & { _id: string }): PedidoEnCola => ({
+  numeroPedido: `PED-${datos._id}`,
   tipoProducto: 'general',
   puntualidad: 'A TIEMPO',
   fechaHoraProgramada: new Date(2026, 0, 1, 9, 0, 0),
@@ -150,5 +151,32 @@ describe('elegirSiguiente — filtro por tipo de carga', () => {
     const siguiente = elegirSiguiente([soloGeneral], 'construcción', FACTOR_AGING, AHORA);
 
     expect(siguiente).toBeNull();
+  });
+});
+
+describe('candidatosParaGateway', () => {
+  it('ignora los pedidos incompatibles', () => {
+    const general = pedido({ _id: 'a', tipoProducto: 'general' });
+    const construccion = pedido({ _id: 'b', tipoProducto: 'construcción' });
+
+    const candidatos = candidatosParaGateway([general, construccion], 'construcción', FACTOR_AGING, AHORA);
+
+    expect(candidatos.map((p) => p._id)).toEqual(['b']);
+  });
+
+  it('conserva el orden de prioridad entre los compatibles', () => {
+    const anticipado = pedido({ _id: 'a', puntualidad: 'ANTICIPADO' });
+    const tardio = pedido({ _id: 'b', puntualidad: 'TARDÍO' });
+    const aTiempo = pedido({ _id: 'c', puntualidad: 'A TIEMPO' });
+
+    const candidatos = candidatosParaGateway([tardio, anticipado, aTiempo], 'general', FACTOR_AGING, AHORA);
+
+    expect(candidatos.map((p) => p._id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('lista vacia si no hay pedidos compatibles', () => {
+    const soloGeneral = pedido({ _id: 'a', tipoProducto: 'general' });
+
+    expect(candidatosParaGateway([soloGeneral], 'construcción', FACTOR_AGING, AHORA)).toEqual([]);
   });
 });

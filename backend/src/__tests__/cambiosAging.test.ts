@@ -10,6 +10,7 @@ const AHORA = new Date(2026, 0, 1, 12, 0, 0);
 const FACTOR_AGING = 20;
 
 const pedido = (datos: Partial<PedidoParaAging> & { _id: string }): PedidoParaAging => ({
+  numeroPedido: `PED-${datos._id}`,
   tipoProducto: 'general',
   puntualidad: 'A TIEMPO',
   fechaHoraProgramada: new Date(2026, 0, 1, 9, 0, 0),

@@ -47,7 +47,11 @@ const leerParametroEntero = async (
   return numero;
 };
 
-const leerFactorAgingMin = (): Promise<number> =>
+/**
+ * Exportado: lo reutiliza services/descargas.ts (promoverSiguienteDeLaCola)
+ * para leer el mismo factor, sin cache, en el momento de promover.
+ */
+export const leerFactorAgingMin = (): Promise<number> =>
   leerParametroEntero(CLAVES_PARAMETROS.factorAgingMin, 20, 1, 1440);
 
 const leerLimiteEsperaMax = (): Promise<number> =>
@@ -69,8 +73,11 @@ interface PedidoEnColaLeido {
 /**
  * Los pedidos activos que estan hoy en la cola (estado EN COLA), con el
  * proveedor poblado para poder mostrar su nombre.
+ *
+ * Exportado: promoverSiguienteDeLaCola (services/descargas.ts) tambien
+ * necesita esta misma lista para calcular los candidatos de un gateway.
  */
-const leerPedidosEnCola = (): Promise<PedidoEnColaLeido[]> =>
+export const leerPedidosEnCola = (): Promise<PedidoEnColaLeido[]> =>
   Pedido.find({ activo: true, estado: 'EN COLA' })
     .populate('proveedorId', 'razonSocial')
     .select(
@@ -78,8 +85,9 @@ const leerPedidosEnCola = (): Promise<PedidoEnColaLeido[]> =>
     )
     .lean<PedidoEnColaLeido[]>();
 
-const aPedidoEnCola = (pedido: PedidoEnColaLeido): PedidoEnCola => ({
+export const aPedidoEnCola = (pedido: PedidoEnColaLeido): PedidoEnCola => ({
   _id: pedido._id.toString(),
+  numeroPedido: pedido.numeroPedido,
   tipoProducto: pedido.tipoProducto,
   // Un pedido EN COLA siempre registro su llegada (ver llegadaController),
   // asi que puntualidad deberia estar siempre; el fallback es solo para no

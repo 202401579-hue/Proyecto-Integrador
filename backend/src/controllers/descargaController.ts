@@ -8,7 +8,7 @@ import { registrarEvento } from '../services/eventos';
 import {
   POPULATE_PEDIDO,
   iniciarDescargaDePedido,
-  promoverPrimeroDeLaCola
+  promoverSiguienteDeLaCola
 } from '../services/descargas';
 
 const MENSAJE_DESCARGA_NO_ENCONTRADA = 'La descarga ya fue finalizada o no existe';
@@ -36,7 +36,11 @@ export const iniciarDescarga = async (req: Request, res: Response): Promise<void
     const resultado = await iniciarDescargaDePedido(req, pedidoId, gatewayId);
 
     if (resultado.tipo === 'rechazado') {
-      res.status(resultado.estado).json({ mensaje: resultado.mensaje });
+      res.status(resultado.estado).json({
+        mensaje: resultado.mensaje,
+        // Solo lo trae el rechazo por orden de turno (ver services/descargas.ts).
+        ...(resultado.pedidoSugerido ? { pedidoSugerido: resultado.pedidoSugerido } : {})
+      });
       return;
     }
 
@@ -186,19 +190,21 @@ export const finalizarDescarga = async (req: Request, res: Response): Promise<vo
     let promocion = null;
 
     try {
-      const promovida = await promoverPrimeroDeLaCola(req, gatewayLiberado);
+      // req.usuario existe siempre: la ruta pasa por verificarToken antes de
+      // llegar aca. reevaluarCola (dentro de promoverSiguienteDeLaCola)
+      // necesita el id para registrar AGING_APLICADO con quien la disparo.
+      const usuarioId = req.usuario?.id ?? '';
+      const promovida = await promoverSiguienteDeLaCola(req, gatewayLiberado, usuarioId);
 
-      if (promovida?.tipo === 'iniciada') {
+      if (promovida) {
         promocion = {
-          pedido: promovida.pedido,
-          gateway: promovida.gateway,
-          descarga: promovida.descarga
+          pedidoId: String(promovida.pedido._id),
+          numeroPedido: promovida.pedido.numeroPedido,
+          numeroGateway: promovida.gateway.numeroGateway,
+          prioridadCalculada: promovida.prioridadCalculada,
+          minutosEnEspera: promovida.minutosEnEspera,
+          gatewayId: promovida.gatewayId
         };
-      } else if (promovida?.tipo === 'rechazado') {
-        // No es un error del cliente: la cola tenia un candidato y algo
-        // cambio entre la busqueda y el inicio. Se deja en el log y el
-        // gateway queda libre.
-        console.error('[Descargas] No se pudo promover al siguiente de la cola:', promovida.mensaje);
       }
     } catch (error) {
       console.error(
