@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Script from "next/script";
 import { obtenerRutaPorRol, sesionDesdeToken } from "@/lib/session";
+import { puedeAcceder } from "@/lib/rutasCompartidas";
 import NavbarPrivado from "@/components/NavbarPrivado";
 import Sidebar from "@/components/Sidebar";
 import { SesionProvider } from "@/components/SesionProvider";
@@ -26,8 +27,10 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
   const sesion = sesionDesdeToken(token);
   const rutaDelRol = sesion ? obtenerRutaPorRol(sesion.rol) : null;
 
-  const dentroDeSuSeccion =
-    !!rutaDelRol && (pathname === rutaDelRol || pathname.startsWith(`${rutaDelRol}/`));
+  // puedeAcceder combina el prefijo de la sección del rol con las rutas
+  // compartidas (ver lib/rutasCompartidas.ts, por ejemplo /cola, que no
+  // pertenece al prefijo de ningún rol pero los tres pueden ver).
+  const dentroDeSuSeccion = !!sesion && puedeAcceder(sesion.rol, pathname);
 
   useEffect(() => {
     if (!montado) return;

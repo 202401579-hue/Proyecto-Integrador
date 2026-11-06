@@ -11,17 +11,24 @@ interface EnlaceSidebar {
   icono: string;
 }
 
+// "Cola de espera" (/cola) no pertenece al prefijo de ningún rol: la
+// autoriza RUTAS_COMPARTIDAS en lib/rutasCompartidas.ts, y por eso aparece
+// igual en los tres menús.
+const ENLACE_COLA: EnlaceSidebar = { href: "/cola", label: "Cola de espera", icono: "bi-hourglass-split" };
+
 const ENLACES_POR_ROL: Record<Rol, EnlaceSidebar[]> = {
   Administrador: [
     { href: "/administrador", label: "Inicio", icono: "bi-house" },
     { href: "/administrador/usuarios", label: "Usuarios", icono: "bi-people" },
     { href: "/administrador/parametros", label: "Parámetros", icono: "bi-sliders" },
     { href: "/administrador/gateways", label: "Gateways", icono: "bi-hdd-rack" },
+    ENLACE_COLA,
     { href: "/administrador/indicadores", label: "Indicadores", icono: "bi-graph-up" },
     { href: "/administrador/bitacora", label: "Bitácora", icono: "bi-journal-text" },
   ],
   Coordinador: [
     { href: "/coordinador", label: "Tablero", icono: "bi-grid-3x3-gap" },
+    ENLACE_COLA,
     { href: "/coordinador/proveedores", label: "Proveedores", icono: "bi-building" },
     { href: "/coordinador/pedidos", label: "Pedidos", icono: "bi-calendar-check" },
     { href: "/coordinador/indicadores", label: "Indicadores", icono: "bi-graph-up" },
@@ -30,6 +37,7 @@ const ENLACES_POR_ROL: Record<Rol, EnlaceSidebar[]> = {
   Operador: [
     { href: "/operador", label: "Inicio", icono: "bi-house" },
     { href: "/operador/llegadas", label: "Llegadas", icono: "bi-truck" },
+    ENLACE_COLA,
   ],
 };
 
