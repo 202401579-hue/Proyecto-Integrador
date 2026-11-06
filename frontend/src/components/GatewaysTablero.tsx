@@ -36,8 +36,9 @@ interface PedidoElegible {
 // Respuesta de POST /api/descargas/finalizar: si había un camión compatible
 // esperando, el backend le inicia la descarga en la misma bahía.
 interface Promocion {
-  pedido?: { numeroPedido?: string };
-  gateway?: { _id?: string; numeroGateway?: number };
+  numeroPedido?: string;
+  numeroGateway?: number;
+  gatewayId?: string;
 }
 
 // Cuánto tiempo se resalta la bahía que recibió un camión automáticamente.
@@ -251,10 +252,10 @@ export default function GatewaysTablero() {
         // la descarga en la misma bahía: la tarjeta sigue roja con él.
         const promocion = cuerpo.promocion;
         if (promocion) {
-          const numero = promocion.pedido?.numeroPedido ?? "siguiente de la cola";
-          const bahia = promocion.gateway?.numeroGateway ?? gateway.numeroGateway;
+          const numero = promocion.numeroPedido ?? "siguiente de la cola";
+          const bahia = promocion.numeroGateway ?? gateway.numeroGateway;
           texto += ` Se asignó automáticamente el pedido ${numero} al Gateway ${bahia}.`;
-          resaltarAsignacion(promocion.gateway?._id ?? gateway._id);
+          resaltarAsignacion(promocion.gatewayId ?? gateway._id);
         }
         setAviso({ tipo: promocion ? "info" : "success", texto });
       }
