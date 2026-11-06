@@ -47,7 +47,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 |---|---|
 | `npm run dev` | Servidor en modo desarrollo, recarga al guardar |
 | `npm run seed` | Borra los usuarios y recrea los tres de prueba |
-| `npm run seed:parametros` | Borra los parámetros y recarga los iniciales: horario operativo y tolerancias |
+| `npm run seed:parametros` | Borra los parámetros y recarga los iniciales: horario operativo y tolerancias (incluye, por upsert, los dos de la cola del Sprint 6) |
+| `npm run seed:parametros-cola` | Solo los dos parámetros de la cola (`FACTOR_AGING_MIN`, `LIMITE_ESPERA_MAX`), por upsert: no borra nada |
 | `npm run seed:gateways` | Carga las cinco bahías de descarga y las deja en `LIBRE`; no borra ni cambia sus `_id` |
 | `npm run seed:demo` | Borra proveedores y pedidos y carga los datos de la demo (no toca usuarios ni parámetros) |
 | `npm run build` | Compila TypeScript a `dist/` |
@@ -92,7 +93,7 @@ incorrecta**, para no revelar qué correos están registrados:
 { "mensaje": "Credenciales inválidas" }
 ```
 
-El payload del token lleva `id`, `correo` y `rol`, y expira a las 24 horas.
+El payload del token lleva `id`, `correo` y `rol`, y expira a las 8 horas.
 Nunca lleva la contraseña ni el hash.
 
 ### Rutas de demostración del RBAC
@@ -285,7 +286,7 @@ copiándolos.
 El **nombre** del usuario no viaja en el JWT, que solo lleva `id`, `correo` y
 `rol`. En cada escritura se busca en la base con el `id` del token
 (`src/services/usuarioAuditoria.ts`). No agreguen el nombre al token: el login
-no se toca y, además, el nombre quedaría congelado las 24 horas que dura la
+no se toca y, además, el nombre quedaría congelado las 8 horas que dura la
 sesión. Si el usuario del token ya no está en la base, se guarda su correo,
 para que la auditoría nunca quede vacía.
 
@@ -987,6 +988,323 @@ atraso ya salga `TARDÍO`.
 - Las ventanas de los pedidos de arribo pueden caer fuera del horario operativo
   o en domingo, porque se calculan a partir del reloj. Es a propósito: son datos
   insertados por el seed, no pedidos programados desde la API.
+
+---
+
+## Sprint 5 — MFA y administración de usuarios
+
+Login en dos pasos. `POST /api/auth/login` devuelve el token de acceso
+directo **solo si** el usuario no tiene el MFA obligatorio y tampoco lo
+configuró todavía. En cualquier otro caso devuelve un **token temporal**
+(`DURACION_TOKEN_TEMPORAL`, 5 minutos) y el paso que corresponde:
+
+- **Configurar** (`mfaObligatorio: true` y todavía sin configurar):
+  `POST /api/mfa/setup` (con el token temporal) entrega el secreto TOTP y
+  los códigos de recuperación; `POST /api/mfa/enable` confirma con el primer
+  código de seis dígitos y activa el factor.
+- **Verificar** (ya tiene el MFA configurado): `POST /api/auth/mfa/verify-login`
+  (con el token temporal) recibe un código TOTP o uno de recuperación y
+  entrega el token de acceso definitivo (`DURACION_TOKEN_ACCESO`, 8 horas).
+
+Las tres rutas de MFA van detrás de `verifyTempToken`, no de `verificarToken`:
+a este módulo se entra con el token temporal del login, nunca con uno de
+acceso.
+
+**Administración de usuarios** (`/api/usuarios`, solo rol `Administrador`):
+`GET /` y `GET /:id` para listar, `POST /` para crear, `PUT /:id` para
+actualizar (incluye activar/desactivar `mfaObligatorio` y cambiar el rol),
+`DELETE /:id` para la baja lógica, y `POST /:id/mfa/reiniciar` para borrarle
+el MFA configurado a alguien que perdió el dispositivo (vuelve a pedirle
+`setup` en su próximo login).
+
+---
+
+## Sprint 6 — Cola de prioridad con aging
+
+Hasta el Sprint 5 la cola de espera era FIFO puro: el primero en registrar su
+llegada (`fechaHoraLlegadaReal`) era el primero en entrar a una bahía. El
+Sprint 6 agrega una **prioridad calculada** que combina la puntualidad del
+arribo con el tiempo que el pedido lleva esperando, y expone esa cola por su
+propio endpoint en lugar de calcularla sobre la marcha en el tablero.
+
+### Arquitectura
+
+La regla transversal es la misma del resto del proyecto: `cola/` tiene solo
+**funciones puras** (nada de Mongoose ni de Express, para poder probarlas sin
+levantar la base), y `services/` es lo único que lee y escribe en Mongo.
+
+```
+backend/src/cola/              (funciones puras)
+├── heapBinario.ts    → HeapBinario<T>: heap genérico sobre un arreglo.
+├── prioridad.ts      → PRIORIDAD_BASE, calcularMinutosEspera(),
+│                        calcularPrioridad(), prioridadBaseDe(),
+│                        compararPedidosCola() (el criterio de orden).
+├── construirCola.ts  → ordenarCola() (usa el heap + el comparador),
+│                        candidatosParaGateway() (filtra por tipo de carga),
+│                        elegirSiguiente() (el primero de esa lista, o null).
+├── cambiosAging.ts   → calcularCambiosAging(): qué pedidos subieron de
+│                        prioridad respecto de lo que tenían guardado.
+└── validarTurno.ts   → verificarTurno(): si un pedido es el primero de una
+                         lista de candidatos ya ordenada.
+
+backend/src/services/
+├── cola.ts        → el único archivo con acceso a Mongoose para la cola.
+│                     obtenerColaOrdenada() (GET /api/cola, solo lectura) y
+│                     reevaluarCola() (recalcula, guarda con bulkWrite y
+│                     registra AGING_APLICADO). Lee FACTOR_AGING_MIN y
+│                     LIMITE_ESPERA_MAX directo de la base, sin caché.
+├── ordenCola.ts    → puente entre services/cola.ts y cola/validarTurno.ts:
+│                     verificarTurnoDelPedido() para el inicio manual.
+└── descargas.ts    → promoverSiguienteDeLaCola() (RN-11) e
+                       iniciarDescargaDePedido() (ahí vive el chequeo del
+                       orden estricto, ver más abajo).
+```
+
+### La fórmula de prioridad
+
+```
+prioridadCalculada = prioridadBase + floor(minutosEnEspera / FACTOR_AGING_MIN)
+```
+
+`prioridadBase` sale de la puntualidad con la que llegó el camión — **mayor
+número, mayor prioridad**:
+
+| Puntualidad | Base |
+|---|---|
+| `A TIEMPO` | 3 |
+| `ANTICIPADO` | 2 |
+| `TARDÍO` | 1 |
+| (no reconocida) | 1 |
+
+`AUSENTE` no tiene entrada propia porque un pedido `AUSENTE` nunca llega a la
+cola de descarga (no está en `ESTADOS_ELEGIBLES_DESCARGA`); si llegara a
+colarse un dato así, cae en el mismo 1 de "no reconocida".
+
+**Aging:** cada `FACTOR_AGING_MIN` minutos completos de espera suman un punto
+de prioridad, sin techo. Con el valor por defecto (20 minutos): un pedido
+`TARDÍO` (base 1) que lleva 60 minutos esperando tiene prioridad 1 + 3 = 4,
+por delante de un `A TIEMPO` (base 3) que acaba de llegar. Es a propósito:
+nadie se queda esperando para siempre solo por haber llegado con atraso.
+
+### Desempate
+
+Cuando dos pedidos quedan con la misma `prioridadCalculada`, se desempata en
+este orden (ver `compararPedidosCola()`):
+
+1. **`prioridadCalculada`** descendente (ya cubierto arriba).
+2. **Hora programada** (`fechaHoraProgramada`, la cita) ascendente.
+3. **Ingreso a la cola** (`fechaHoraIngresoCola`) ascendente.
+4. **`_id`** como texto, ascendente — el desempate final, siempre
+   determinista.
+
+### Parámetros nuevos
+
+| Clave | Default | Rango | Para qué |
+|---|---|---|---|
+| `FACTOR_AGING_MIN` | `20` | entero, 1 a 1440 | Minutos de espera que suman un punto de prioridad |
+| `LIMITE_ESPERA_MAX` | `60` | entero, 1 a 1440 | Minutos de espera a partir de los cuales el pedido sale con `excedeLimite: true` (alerta visual) |
+
+A diferencia de `HORA_APERTURA`, las tolerancias, etc. (que se leen con
+`obtenerConfiguracionOperativa()` y se cachean 60 segundos), estos dos se
+leen **directo de la colección, en cada petición**: la demo los cambia en
+vivo desde la pantalla de Parámetros y un cache de un minuto se notaría. El
+`PUT /api/parametros/:id` valida que el valor sea un entero entre 1 y 1440
+para estas dos claves antes de guardar.
+
+Se siembran con `npm run seed:parametros-cola` (o automáticamente dentro de
+`npm run seed:parametros`), por **upsert**: a diferencia del resto de
+parámetros, correr el seed de nuevo no les pisa el valor si ya existen.
+
+### Endpoints
+
+#### `GET /api/cola`
+
+Roles: `Administrador`, `Coordinador`, `Operador`. Solo lectura: no escribe
+nada ni crea eventos. Calcula el orden al vuelo con los datos del momento
+(no depende de lo que haya quedado guardado en `prioridadCalculada`).
+
+```json
+{
+  "factorAgingMin": 20,
+  "limiteEsperaMax": 60,
+  "generadoEn": "2026-11-05T23:31:24.871Z",
+  "items": [
+    {
+      "posicion": 1,
+      "pedidoId": "6aebb14fc0b56b1ed2307487",
+      "numeroPedido": "PED-EQUI04-000000007",
+      "proveedor": { "id": "6aebb14fc0b56b1ed230747f", "nombre": "Distribuidora Comercial Altamira S.A. de C.V." },
+      "tipoProducto": "general",
+      "puntualidad": "ANTICIPADO",
+      "prioridadBase": 2,
+      "prioridadCalculada": 18,
+      "minutosEnEspera": 331,
+      "fechaHoraProgramada": "2026-11-05T18:00:00.000Z",
+      "fechaHoraIngresoCola": "2026-11-05T18:00:00.000Z",
+      "excedeLimite": true
+    }
+  ]
+}
+```
+
+No pagina: la cola de un depósito con 5 bahías no llega al tamaño donde eso
+importe.
+
+#### `POST /api/cola/reevaluar`
+
+Roles: `Administrador`, `Coordinador`, `Operador`. Recalcula la prioridad y
+los minutos de espera de **todos** los pedidos `EN COLA`, los guarda con un
+único `bulkWrite` y registra `AGING_APLICADO` solo para los que subieron de
+nivel respecto de lo que tenían guardado. Devuelve la cola recién recalculada
+más la cantidad de pedidos que subieron:
+
+```json
+{
+  "factorAgingMin": 20,
+  "limiteEsperaMax": 60,
+  "generadoEn": "2026-11-05T23:40:00.000Z",
+  "items": [ /* mismo formato que GET /api/cola */ ],
+  "pedidosQueSubieronDePrioridad": 2
+}
+```
+
+> En el Sprint 7, `autorizarRoles('Administrador', 'Coordinador', 'Operador')`
+> en estas dos rutas pasa a `checkPermission('cola')`.
+
+### Los tres eventos nuevos
+
+Se agregaron al enum `ACCIONES_EVENTO` de `models/Evento.ts`:
+
+- **`INGRESO_COLA`** — lo registra `POST /api/llegadas` (además de
+  `LLEGADA_REGISTRADA`) cuando el pedido pasa a `EN COLA`:
+  ```json
+  {
+    "numeroPedido": "PED-EQUI04-000000010",
+    "puntualidad": "A TIEMPO",
+    "prioridadCalculada": 3
+  }
+  ```
+- **`AGING_APLICADO`** — lo registra `reevaluarCola()`, uno por cada pedido
+  que subió de prioridad:
+  ```json
+  {
+    "prioridadAnterior": 3,
+    "prioridadNueva": 5,
+    "minutosEnEspera": 40,
+    "mensaje": "Prioridad 3 → 5 tras 40 min en espera"
+  }
+  ```
+- **`PROMOCION_AUTOMATICA_GATEWAY`** — lo registra `promoverSiguienteDeLaCola()`
+  cuando asigna un pedido al gateway que se acaba de liberar:
+  ```json
+  {
+    "numeroGateway": 1,
+    "tipoCarga": "general",
+    "puntualidad": "TARDÍO",
+    "prioridadCalculada": 7,
+    "minutosEnEspera": 80,
+    "motivo": "Mayor prioridad entre los pedidos compatibles con la bahía liberada"
+  }
+  ```
+
+### Flujo de la promoción automática (RN-11), paso a paso
+
+`promoverSiguienteDeLaCola(req, gateway, usuarioId)` corre dentro de
+`POST /api/descargas/finalizar`, después de que el gateway ya quedó `LIBRE`:
+
+1. **Reevalúa la cola** (`reevaluarCola(usuarioId)`): guarda la prioridad al
+   día de todos los pedidos `EN COLA` y registra `AGING_APLICADO`.
+2. **Calcula los candidatos** compatibles con el tipo de carga del gateway
+   liberado (`candidatosParaGateway`), ya ordenados por prioridad.
+3. **Recorre los candidatos de a uno.** Para cada uno, reclama el pedido de
+   forma atómica: `Pedido.findOneAndUpdate({_id, estado:'EN COLA', activo:true}, {estado:'DESCARGANDO'})`.
+   Si devuelve `null` (otra petición ya lo tomó), pasa al siguiente candidato.
+4. Con el pedido reclamado, **ocupa el gateway** con el mismo mecanismo
+   atómico del inicio manual (`estado:'LIBRE'` → `'OCUPADO'`). Si falla —otra
+   asignación concurrente lo tomó, o quedó `FUERA DE SERVICIO`— **devuelve el
+   pedido a `EN COLA`** y el proceso se detiene: no se prueba otro candidato,
+   porque el problema es el gateway, no el pedido.
+5. Crea la `Descarga`, registra `GATEWAY_ASIGNADO` y `DESCARGA_INICIADA`
+   (igual que el camino manual) y además `PROMOCION_AUTOMATICA_GATEWAY`.
+6. **Sin candidatos compatibles:** no se crea ningún evento y el gateway
+   queda `LIBRE`.
+
+### Orden estricto en el inicio manual
+
+`POST /api/descargas/iniciar` ya no deja saltarse el orden de la cola. Si el
+pedido está `EN COLA` y **no** es el primero de `candidatosParaGateway` para
+ese gateway, responde **409**:
+
+```json
+{
+  "mensaje": "Debe atenderse primero el pedido PED-EQUI04-000000007 (prioridad 18, 331 min en espera)",
+  "pedidoSugerido": {
+    "pedidoId": "6aebb14fc0b56b1ed2307487",
+    "numeroPedido": "PED-EQUI04-000000007",
+    "prioridadCalculada": 18
+  }
+}
+```
+
+Dos excepciones, a propósito:
+- Pedidos en `ANTICIPADO` / `A TIEMPO` / `TARDÍO` (los que llegaron antes del
+  Sprint 4 y todavía no tienen el flujo de cola completo) **no** pasan por
+  esta regla: conservan el comportamiento de siempre.
+- La promoción automática nunca pasa por `iniciarDescargaDePedido`, así que
+  esta validación no la afecta — ya sale ordenada de `candidatosParaGateway`.
+
+### Complejidad
+
+| Operación | Costo |
+|---|---|
+| `insertar()` / `extraer()` del heap | O(log n) |
+| `HeapBinario.desdeArreglo()` (heapify) | O(n) |
+| `ordenarCola()` completa (heapify + n extracciones) | O(n log n) |
+
+### Nota honesta sobre concurrencia
+
+El `findOneAndUpdate` con el estado esperado en el filtro evita que dos
+bahías que se liberan casi al mismo tiempo le asignen el **mismo** pedido a
+las dos: solo una de las dos consigue el reclamo, la otra cae a su siguiente
+candidato. Lo que **no** garantiza es el orden estricto bajo esa carrera: si
+el proceso A reclama el candidato de mayor prioridad y el proceso B, al no
+poder tomarlo, cae a su candidato #2, el resultado es seguro (nadie queda
+asignado dos veces) pero no asegura que la bahía que se liberó primero en el
+reloj real sea la que atendió, sí o sí, al pedido de mayor prioridad de
+ambas colas combinadas. Es la misma limitación de siempre: el MongoDB local
+no tiene replica set y por lo tanto no hay transacciones multi-documento;
+se cubre con el orden de las escrituras y reversión explícita, no con una
+transacción.
+
+---
+
+## Cómo ejecutar las pruebas funcionales sin tocar los datos de desarrollo
+
+`npm run test:funcional` (CP-01 a CP-15, PI-01 a PI-05) crea y borra pedidos y
+proveedores reales en la base a la que apunte el backend. **No lo corras
+contra `logistica_db`** (la base de desarrollo): usá una base aparte, por
+ejemplo `logistica_test`, pasando `MONGO_URI` y `PORT` por variable de
+entorno en la línea de comandos, sin tocar el `.env`.
+
+```bash
+# 1. Sembrar la base de prueba (NO corras seed:demo: ejecutar.ts solo espera
+#    seed, seed:gateways y seed:parametros; seed:demo deja un pedido fijo
+#    que choca con las citas que los casos programan dinámicamente).
+MONGO_URI="mongodb://localhost:27017/logistica_test" npm run seed
+MONGO_URI="mongodb://localhost:27017/logistica_test" npm run seed:parametros
+MONGO_URI="mongodb://localhost:27017/logistica_test" npm run seed:gateways
+
+# 2. Levantar el backend de prueba en un puerto distinto del de desarrollo.
+PORT=4001 MONGO_URI="mongodb://localhost:27017/logistica_test" npm run dev
+
+# 3. En otra terminal, correr las pruebas contra ese mismo puerto y base.
+PORT=4001 MONGO_URI="mongodb://localhost:27017/logistica_test" npm run test:funcional
+```
+
+**Aviso:** `ejecutar.ts` borra, al terminar (y al empezar cada caso), todo lo
+que el banco de pruebas haya creado en esa base. Si alguna vez necesitás
+reiniciarla del todo, es una base de prueba: se puede eliminar y volver a
+sembrar sin ningún cuidado especial, a diferencia de `logistica_db`.
 
 ---
 
