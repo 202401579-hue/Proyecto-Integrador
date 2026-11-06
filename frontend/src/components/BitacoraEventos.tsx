@@ -18,6 +18,10 @@ const ACCIONES_EVENTO = [
   "DESCARGA_FINALIZADA",
   "CITA_REPROGRAMADA",
   "GATEWAY_MANTENIMIENTO",
+  // Sprint 6: cola con prioridad.
+  "INGRESO_COLA",
+  "AGING_APLICADO",
+  "PROMOCION_AUTOMATICA_GATEWAY",
 ] as const;
 
 type AccionEvento = (typeof ACCIONES_EVENTO)[number];
@@ -89,6 +93,17 @@ function resumirDetalles(evento: Evento): string {
       return "La cita del pedido cambió de horario";
     case "GATEWAY_MANTENIMIENTO":
       return `Gateway ${String(d.numeroGateway ?? "—")}: cambio de estado de mantenimiento`;
+    case "INGRESO_COLA":
+      return `Puntualidad: ${String(d.puntualidad ?? "—")} (prioridad inicial ${String(d.prioridadCalculada ?? "—")})`;
+    case "AGING_APLICADO":
+      // El backend ya arma el texto completo ("Prioridad 3 → 5 tras 40 min
+      // en espera"): se muestra tal cual en vez de reconstruirlo aquí.
+      return String(d.mensaje ?? "—");
+    case "PROMOCION_AUTOMATICA_GATEWAY":
+      return (
+        `Gateway ${String(d.numeroGateway ?? "—")} (carga ${String(d.tipoCarga ?? "—")}) · ` +
+        `prioridad ${String(d.prioridadCalculada ?? "—")} · ${String(d.minutosEnEspera ?? "—")} min en espera`
+      );
     default:
       return "—";
   }
@@ -101,6 +116,9 @@ const ETIQUETA_ACCION: Record<AccionEvento, string> = {
   DESCARGA_FINALIZADA: "Descarga finalizada",
   CITA_REPROGRAMADA: "Cita reprogramada",
   GATEWAY_MANTENIMIENTO: "Gateway en mantenimiento",
+  INGRESO_COLA: "Ingreso a la cola",
+  AGING_APLICADO: "Aging aplicado",
+  PROMOCION_AUTOMATICA_GATEWAY: "Promoción automática a gateway",
 };
 
 /**

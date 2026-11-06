@@ -86,6 +86,17 @@ function plural(n: number, singular: string, varios: string) {
   return `${n} ${n === 1 ? singular : varios}`;
 }
 
+// Avisa a la pantalla de /cola (y a cualquier otra pestaña abierta) que la
+// cola de espera puede haber cambiado, para que refresque al instante en
+// vez de esperar a su próximo sondeo. Si el navegador no soporta
+// BroadcastChannel, no hace nada: esa pantalla sigue con su sondeo normal.
+function avisarCambioDeCola() {
+  if (typeof BroadcastChannel === "undefined") return;
+  const canal = new BroadcastChannel("cola-cambios");
+  canal.postMessage({ origen: "GatewaysTablero" });
+  canal.close();
+}
+
 /** La cola: los pedidos que ya llegaron, del primero en llegar al último. */
 function armarCola(todos: PedidoElegible[]): PedidoElegible[] {
   const llegada = (p: PedidoElegible) =>
@@ -218,6 +229,7 @@ export default function GatewaysTablero() {
           texto: `Descarga iniciada: ${pedido.numeroPedido} en el gateway ${gateway.numeroGateway}.`,
         });
         setGatewayElegido(null);
+        avisarCambioDeCola();
       }
       await cargarTablero();
     } catch {
@@ -258,6 +270,7 @@ export default function GatewaysTablero() {
           resaltarAsignacion(promocion.gatewayId ?? gateway._id);
         }
         setAviso({ tipo: promocion ? "info" : "success", texto });
+        avisarCambioDeCola();
       }
       await cargarTablero();
     } catch {
