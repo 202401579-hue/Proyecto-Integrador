@@ -5,11 +5,8 @@ import Pedido from '../models/Pedido';
 import { nombreDelUsuario } from '../services/usuarioAuditoria';
 import { respondioIdInvalido } from '../services/respuestasError';
 import { registrarEvento } from '../services/eventos';
-import {
-  POPULATE_PEDIDO,
-  iniciarDescargaDePedido,
-  promoverSiguienteDeLaCola
-} from '../services/descargas';
+import { POPULATE_PEDIDO, iniciarDescargaDePedido } from '../services/descargas';
+import { promoverSiguienteDeLaCola } from '../services/promocionCola';
 
 const MENSAJE_DESCARGA_NO_ENCONTRADA = 'La descarga ya fue finalizada o no existe';
 
