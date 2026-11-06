@@ -7,6 +7,10 @@ import {
   leerPedido,
   ponerGatewayEn
 } from './escenario';
+import { prioridadBaseDe } from '../cola/prioridad';
+
+/** Lo que llevan los pedidos EN COLA de este archivo: todos A TIEMPO. */
+const PRIORIDAD_A_TIEMPO = prioridadBaseDe('A TIEMPO');
 
 /**
  * CP-10 a CP-12 — Orden de la cola, reprogramación y correlativo.
@@ -52,12 +56,18 @@ export const casosDeColaYCitas: DefinicionCaso[] = [
       for (const n of [1, 2, 3, 4, 5]) await ponerGatewayEn(n, 'OCUPADO');
       await ponerGatewayEn(1, 'LIBRE');
 
-      // El que ocupa la bahía ahora, para después liberarla.
+      // El que ocupa la bahía ahora, para después liberarla. EN COLA, igual
+      // que deja POST /api/llegadas en el flujo real (Sprint 6): con estado
+      // 'A TIEMPO' a secas (el formato previo al Sprint 4) services/cola.ts
+      // nunca lo vería para la promoción automática.
       const ocupante = await crearPedidoDePrueba({
         inicioEnMinutos: -120,
         tipoProducto: 'general',
-        estado: 'A TIEMPO',
-        llegadaEnMinutos: -110
+        estado: 'EN COLA',
+        llegadaEnMinutos: -110,
+        puntualidad: 'A TIEMPO',
+        minutosEnEspera: 0,
+        prioridadCalculada: PRIORIDAD_A_TIEMPO
       });
       const gateway1 = await leerGatewayPorNumero(1);
       const inicio = await api<RespuestaDescarga>('POST', '/api/descargas/iniciar', 'coordinador', {
@@ -66,16 +76,20 @@ export const casosDeColaYCitas: DefinicionCaso[] = [
       });
       verificarIgual(inicio.estado, 201, 'Se ocupa la bahía general de partida');
 
-      // Tres en espera. P2 tiene la cita más tardía pero el arribo más temprano:
-      // si el orden fuera por hora de cita, entraría P3; debe entrar P2.
+      // Tres en espera, todos con la misma puntualidad (A TIEMPO): con la
+      // misma base de prioridad, el aging por minutos de espera decide el
+      // orden, igual que antes decidía la antigüedad de arribo sola.
+      // P2 tiene la cita más tardía pero el arribo más temprano: si el orden
+      // fuera por hora de cita, entraría P3; debe entrar P2.
+      const datosComunes = { puntualidad: 'A TIEMPO' as const, minutosEnEspera: 0, prioridadCalculada: PRIORIDAD_A_TIEMPO };
       const p1 = await crearPedidoDePrueba({
-        inicioEnMinutos: -60, tipoProducto: 'general', estado: 'A TIEMPO', llegadaEnMinutos: -40
+        inicioEnMinutos: -60, tipoProducto: 'general', estado: 'EN COLA', llegadaEnMinutos: -40, ...datosComunes
       });
       const p2 = await crearPedidoDePrueba({
-        inicioEnMinutos: -30, tipoProducto: 'general', estado: 'A TIEMPO', llegadaEnMinutos: -80
+        inicioEnMinutos: -30, tipoProducto: 'general', estado: 'EN COLA', llegadaEnMinutos: -80, ...datosComunes
       });
       const p3 = await crearPedidoDePrueba({
-        inicioEnMinutos: -150, tipoProducto: 'general', estado: 'A TIEMPO', llegadaEnMinutos: -10
+        inicioEnMinutos: -150, tipoProducto: 'general', estado: 'EN COLA', llegadaEnMinutos: -10, ...datosComunes
       });
       anotar('En cola: P1 arribó hace 40 min, P2 hace 80 min, P3 hace 10 min.');
 
@@ -207,6 +221,208 @@ export const casosDeColaYCitas: DefinicionCaso[] = [
       const correlativo2 = Number(numero2.split('-')[2]);
       verificarIgual(correlativo2, correlativo1 + 1, 'El correlativo avanza de uno en uno');
       anotar(`Segundo correlativo: ${numero2} (el cancelado no se reutilizó).`);
+    }
+  },
+
+  {
+    id: 'CP-13',
+    titulo: 'GET /api/cola ordena por prioridad con esperas iguales (Sprint 6)',
+    reglas: 'RN-04, RN-12 (prioridad y aging)',
+    ejecutar: async (anotar) => {
+      // Misma espera para los tres: la única diferencia es la puntualidad.
+      // Se verifica el orden RELATIVO entre estos tres, no la posición
+      // absoluta, porque la cola real puede tener otros pedidos (los que
+      // deja npm run seed:demo) mezclados.
+      const esperaMinutos = 30;
+      const tardio = await crearPedidoDePrueba({
+        inicioEnMinutos: -60,
+        tipoProducto: 'general',
+        estado: 'EN COLA',
+        llegadaEnMinutos: -esperaMinutos,
+        puntualidad: 'TARDÍO'
+      });
+      const anticipado = await crearPedidoDePrueba({
+        inicioEnMinutos: -60,
+        tipoProducto: 'general',
+        estado: 'EN COLA',
+        llegadaEnMinutos: -esperaMinutos,
+        puntualidad: 'ANTICIPADO'
+      });
+      const aTiempo = await crearPedidoDePrueba({
+        inicioEnMinutos: -60,
+        tipoProducto: 'general',
+        estado: 'EN COLA',
+        llegadaEnMinutos: -esperaMinutos,
+        puntualidad: 'A TIEMPO'
+      });
+
+      const cola = await api<{ items?: Array<{ pedidoId?: string }> }>('GET', '/api/cola', 'coordinador');
+      verificarIgual(cola.estado, 200, 'GET /api/cola responde 200');
+
+      const items = cola.cuerpo.items ?? [];
+      const posicionDe = (id: string): number => items.findIndex((item) => item.pedidoId === id);
+
+      const posATiempo = posicionDe(String(aTiempo._id));
+      const posAnticipado = posicionDe(String(anticipado._id));
+      const posTardio = posicionDe(String(tardio._id));
+
+      verificar(
+        posATiempo !== -1 && posAnticipado !== -1 && posTardio !== -1,
+        'Los tres pedidos de prueba aparecen en la cola',
+        { posATiempo, posAnticipado, posTardio }
+      );
+      verificar(
+        posATiempo < posAnticipado,
+        'Con la misma espera, A TIEMPO queda antes que ANTICIPADO',
+        { posATiempo, posAnticipado }
+      );
+      verificar(
+        posAnticipado < posTardio,
+        'Con la misma espera, ANTICIPADO queda antes que TARDÍO',
+        { posAnticipado, posTardio }
+      );
+      anotar(
+        `Orden relativo confirmado: A TIEMPO (#${posATiempo + 1}) antes que ` +
+          `ANTICIPADO (#${posAnticipado + 1}) antes que TARDÍO (#${posTardio + 1}).`
+      );
+    }
+  },
+
+  {
+    id: 'CP-14',
+    titulo: 'La promoción automática nunca cruza tipos de carga (Sprint 6)',
+    reglas: 'RN-07, RN-08, RN-11',
+    ejecutar: async (anotar) => {
+      // Caso 1: se libera un gateway GENERAL con un pedido de construcción
+      // esperando: no tiene que promoverse (puede promoverse, en cambio,
+      // algún otro pedido general que ya estuviera en la cola real).
+      for (const n of [2, 3, 4, 5]) await ponerGatewayEn(n, 'OCUPADO');
+      await ponerGatewayEn(1, 'LIBRE');
+
+      const ocupanteGeneral = await crearPedidoDePrueba({
+        inicioEnMinutos: -120,
+        tipoProducto: 'general',
+        estado: 'A TIEMPO',
+        llegadaEnMinutos: -110
+      });
+      const gateway1 = await leerGatewayPorNumero(1);
+      const inicioGeneral = await api<RespuestaDescarga>('POST', '/api/descargas/iniciar', 'coordinador', {
+        pedidoId: String(ocupanteGeneral._id),
+        gatewayId: String(gateway1._id)
+      });
+      verificarIgual(inicioGeneral.estado, 201, 'Se ocupa el Gateway 1 (general) de partida');
+
+      const construccionEsperando = await crearPedidoDePrueba({
+        inicioEnMinutos: -60,
+        tipoProducto: 'construcción',
+        estado: 'EN COLA',
+        llegadaEnMinutos: -50
+      });
+
+      const finGeneral = await api('POST', '/api/descargas/finalizar', 'coordinador', {
+        descargaId: idDeDescarga(inicioGeneral.cuerpo)
+      });
+      verificarIgual(finGeneral.estado, 200, 'Se libera el Gateway 1 (general)');
+
+      const trasFinalizarGeneral = await leerPedido(construccionEsperando._id);
+      verificar(
+        trasFinalizarGeneral?.estado === 'EN COLA',
+        'El pedido de construcción NO se promueve a un gateway general',
+        trasFinalizarGeneral?.estado
+      );
+      anotar('Un pedido de construcción no se promovió a un gateway general liberado.');
+
+      // Caso 2: a la inversa, se libera el Gateway 5 (construcción) con un
+      // pedido general esperando: tampoco tiene que promoverse. Se vuelve a
+      // poner LIBRE porque el caso 1 lo dejó OCUPADO (a propósito, para que
+      // no fuera un candidato ahí).
+      await ponerGatewayEn(5, 'LIBRE');
+      const ocupanteConstruccion = await crearPedidoDePrueba({
+        inicioEnMinutos: -120,
+        tipoProducto: 'construcción',
+        estado: 'A TIEMPO',
+        llegadaEnMinutos: -110
+      });
+      const gateway5 = await leerGatewayPorNumero(5);
+      const inicioConstruccion = await api<RespuestaDescarga>(
+        'POST',
+        '/api/descargas/iniciar',
+        'coordinador',
+        { pedidoId: String(ocupanteConstruccion._id), gatewayId: String(gateway5._id) }
+      );
+      verificarIgual(inicioConstruccion.estado, 201, 'Se ocupa el Gateway 5 (construcción) de partida');
+
+      const generalEsperando = await crearPedidoDePrueba({
+        inicioEnMinutos: -60,
+        tipoProducto: 'general',
+        estado: 'EN COLA',
+        llegadaEnMinutos: -50
+      });
+
+      const finConstruccion = await api('POST', '/api/descargas/finalizar', 'coordinador', {
+        descargaId: idDeDescarga(inicioConstruccion.cuerpo)
+      });
+      verificarIgual(finConstruccion.estado, 200, 'Se libera el Gateway 5 (construcción)');
+
+      const trasFinalizarConstruccion = await leerPedido(generalEsperando._id);
+      verificar(
+        trasFinalizarConstruccion?.estado === 'EN COLA',
+        'El pedido general NO se promueve al Gateway 5 (construcción)',
+        trasFinalizarConstruccion?.estado
+      );
+      anotar('Un pedido general tampoco se promovió al Gateway 5 (construcción).');
+    }
+  },
+
+  {
+    id: 'CP-15',
+    titulo: 'POST /api/descargas/iniciar respeta el orden estricto de la cola (Sprint 6)',
+    reglas: 'RN-12 (orden estricto)',
+    ejecutar: async (anotar) => {
+      await ponerGatewayEn(2, 'LIBRE');
+      const gateway2 = await leerGatewayPorNumero(2);
+
+      // Espera enorme a propósito: así gana la prioridad por aging sobre
+      // cualquier otro pedido general que ya estuviera en la cola real
+      // (los de npm run seed:demo), sin depender de cuánto lleven esperando.
+      const primero = await crearPedidoDePrueba({
+        inicioEnMinutos: -100100,
+        tipoProducto: 'general',
+        estado: 'EN COLA',
+        llegadaEnMinutos: -100000,
+        puntualidad: 'A TIEMPO'
+      });
+      const segundo = await crearPedidoDePrueba({
+        inicioEnMinutos: -70,
+        tipoProducto: 'general',
+        estado: 'EN COLA',
+        llegadaEnMinutos: -60,
+        puntualidad: 'A TIEMPO'
+      });
+
+      const intento = await api<{ mensaje?: string; pedidoSugerido?: { pedidoId?: string; numeroPedido?: string } }>(
+        'POST',
+        '/api/descargas/iniciar',
+        'coordinador',
+        { pedidoId: String(segundo._id), gatewayId: String(gateway2._id) }
+      );
+
+      verificarIgual(intento.estado, 409, 'Saltarse el orden de la cola responde 409');
+      verificarIgual(
+        intento.cuerpo.pedidoSugerido?.pedidoId,
+        String(primero._id),
+        'El pedido sugerido es el que corresponde atender primero'
+      );
+      verificarIgual(
+        intento.cuerpo.pedidoSugerido?.numeroPedido,
+        primero.numeroPedido,
+        'El número de pedido sugerido coincide'
+      );
+      anotar(`Rechazo 409: ${intento.cuerpo.mensaje}`);
+
+      const final = await leerPedido(segundo._id);
+      verificar(final?.estado === 'EN COLA', 'El pedido que se saltó el orden sigue EN COLA', final?.estado);
+      anotar('El pedido que intentó saltarse el orden permanece sin iniciar.');
     }
   }
 ];
