@@ -16,6 +16,9 @@ import { PREFIJO_QA } from './entorno';
 
 const MS_POR_MINUTO = 60 * 1000;
 
+/** Identifica roles y usuarios temporales creados por los escenarios RBAC V3. */
+export const PREFIJO_RBAC_QA = 'QA-RBAC-';
+
 let contador = 0;
 
 /** Número de pedido único para el banco de pruebas. */

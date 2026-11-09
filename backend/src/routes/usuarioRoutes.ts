@@ -8,14 +8,13 @@ import {
   reiniciarMfaDeUsuario
 } from '../controllers/usuarioController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
-// Todo el modulo de usuarios es del rol Administrador: pide token de
-// acceso valido (401) y ese rol (403). Un Coordinador o un Operador no
-// alcanzan ninguna de estas rutas.
-router.use(verificarToken, autorizarRoles('Administrador'));
+// Todo el módulo de usuarios pide ACCESS válido (401) y permiso usuarios
+// vigente en MongoDB (403).
+router.use(verificarToken, checkPermission('usuarios'));
 
 // GET /api/usuarios  (el prefijo /api/usuarios se monta en server.ts)
 router.get('/', listarUsuarios);

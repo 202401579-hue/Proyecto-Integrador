@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { listarEventos } from '../controllers/eventoController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
@@ -15,7 +15,7 @@ router.use(verificarToken);
  * Coordinador. El Operador queda afuera a proposito: su trabajo es
  * registrar arribos y descargas, no revisar quien hizo que.
  */
-router.get('/', autorizarRoles('Administrador', 'Coordinador'), listarEventos);
+router.get('/', checkPermission('kpis'), listarEventos);
 
 /**
  * No hay POST, PUT, PATCH ni DELETE, y no es que falten por hacer: los

@@ -33,7 +33,12 @@ export const ACCIONES_EVENTO = [
   // Sprint 6 — cola con prioridad.
   'INGRESO_COLA',
   'AGING_APLICADO',
-  'PROMOCION_AUTOMATICA_GATEWAY'
+  'PROMOCION_AUTOMATICA_GATEWAY',
+  // Sprint 7 — administración dinámica de roles.
+  'ROL_CREADO',
+  'ROL_MODIFICADO',
+  'ROL_DESACTIVADO',
+  'ROL_ASIGNADO_USUARIO'
 ] as const;
 
 export type AccionEvento = (typeof ACCIONES_EVENTO)[number];

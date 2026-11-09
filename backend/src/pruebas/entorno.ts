@@ -60,6 +60,22 @@ export const iniciarSesion = async (quien: keyof typeof USUARIOS): Promise<strin
   return cuerpo.token;
 };
 
+/** Login sin cache para usuarios creados durante una prueba de RBAC. */
+export const iniciarSesionConCredenciales = async (correo: string, password: string): Promise<string> => {
+  const respuesta = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ correo, password })
+  });
+  const cuerpo = (await respuesta.json()) as { token?: string; mensaje?: string };
+
+  if (!respuesta.ok || !cuerpo.token) {
+    throw new Error(`No se pudo iniciar sesión como ${correo}: ${respuesta.status} ${cuerpo.mensaje ?? ''}`);
+  }
+
+  return cuerpo.token;
+};
+
 export interface Respuesta<T = Record<string, unknown>> {
   estado: number;
   cuerpo: T;
@@ -96,6 +112,30 @@ export const api = async <T = Record<string, unknown>>(
     }
   }
 
+  return { estado: respuesta.status, cuerpo: parseado as T };
+};
+
+/** Llamada autenticada con un token ya obtenido, sin asociarlo a un usuario base. */
+export const apiConToken = async <T = Record<string, unknown>>(
+  metodo: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  ruta: string,
+  token: string,
+  cuerpo?: unknown
+): Promise<Respuesta<T>> => {
+  const respuesta = await fetch(`${BASE_URL}${ruta}`, {
+    method: metodo,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo)
+  });
+  const texto = await respuesta.text();
+  let parseado: unknown = {};
+  if (texto.trim() !== '') {
+    try {
+      parseado = JSON.parse(texto);
+    } catch {
+      parseado = { textoCrudo: texto };
+    }
+  }
   return { estado: respuesta.status, cuerpo: parseado as T };
 };
 

@@ -6,7 +6,7 @@ import Usuario from '../models/Usuario';
  * Resuelve el nombre completo del usuario que hace la peticion, para
  * guardarlo en usuarioCreacion / usuarioActualizacion.
  *
- * El JWT solo lleva id, correo y rol: el nombre no viaja en el token. Se
+ * El JWT solo lleva id, correo, roles y permisos: el nombre no viaja en el token. Se
  * podria haber agregado al payload, pero eso obligaria a tocar el login y,
  * peor, el nombre quedaria congelado mientras dure el token (ocho horas):
  * si el usuario corrige su nombre, la auditoria seguiria escribiendo el

@@ -107,9 +107,9 @@ export const listarEventos = async (req: Request, res: Response): Promise<void> 
 
     const eventos = await Evento.find(filtro)
       .sort({ fechaHora: -1 })
-      // El nombre y el rol de quien lo hizo, y el numero del pedido: es lo
+      // El nombre y los roles de quien lo hizo, y el numero del pedido: es lo
       // que una pantalla de auditoria necesita mostrar sin pedir mas datos.
-      .populate('usuarioId', 'nombre rol')
+      .populate({ path: 'usuarioId', select: 'nombre roles', populate: { path: 'roles', select: 'nombreRol' } })
       .populate('pedidoId', 'numeroPedido');
 
     res.status(200).json(eventos);

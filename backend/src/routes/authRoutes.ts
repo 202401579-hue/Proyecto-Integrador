@@ -3,7 +3,8 @@ import { login } from '../controllers/authController';
 import { verificarLoginConMfa } from '../controllers/mfaController';
 import { verificarToken } from '../middlewares/verificarToken';
 import { verifyTempToken } from '../middlewares/verifyTempToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
+import { PERMISOS_VALIDOS } from '../models/Role';
 
 const router = Router();
 
@@ -25,18 +26,18 @@ router.post('/mfa/verify-login', verifyTempToken, verificarLoginConMfa);
 // el flujo completo en la defensa.
 // ---------------------------------------------------------------------------
 
-// Requiere token valido, sin importar el rol.
-router.get('/perfil', verificarToken, (req: Request, res: Response) => {
+// Requiere token válido y al menos un permiso vigente en la base.
+router.get('/perfil', verificarToken, checkPermission(...PERMISOS_VALIDOS), (req: Request, res: Response) => {
   res.json({ usuario: req.usuario });
 });
 
-// Requiere token valido Y rol Administrador. Los otros roles reciben 403.
+// Ruta demostrativa: requiere el permiso de administracion de usuarios.
 router.get(
   '/solo-admin',
   verificarToken,
-  autorizarRoles('Administrador'),
+  checkPermission('usuarios'),
   (_req: Request, res: Response) => {
-    res.json({ mensaje: 'Ruta visible solo para el rol Administrador' });
+    res.json({ mensaje: 'Ruta visible con el permiso usuarios' });
   }
 );
 

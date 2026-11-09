@@ -1,59 +1,45 @@
-import { api, BASE_URL, DefinicionCaso, iniciarSesion, verificar, verificarIgual } from './entorno';
+import {
+  api,
+  apiConToken,
+  BASE_URL,
+  DefinicionCaso,
+  iniciarSesion,
+  iniciarSesionConCredenciales,
+  verificar,
+  verificarIgual
+} from './entorno';
+import { PREFIJO_RBAC_QA } from './escenario';
 
-/**
- * PI-05 — Prueba integral del control de acceso basado en roles.
- *
- * HU-004 y HU-005 / CU-04 y CU-05: cada endpoint protegido declara qué roles
- * lo alcanzan, y el middleware debe hacerlo valer. Es una prueba integral y no
- * unitaria porque recorre la cadena completa: emisión del token en el login,
- * su verificación en verificarToken y la comprobación del rol en
- * autorizarRoles, sobre el servidor Express realmente levantado.
- *
- * Códigos que distingue el backend:
- *   401 — no hay token, o el token es inválido o expiró.
- *   403 — el token es válido pero el rol no alcanza para ese recurso.
- *
- * Sobre los endpoints permitidos se verifica «distinto de 403» en lugar de
- * «200». Varios son POST que, invocados sin un cuerpo válido, responden 400 o
- * 404: eso ya demuestra que la autorización dejó pasar la petición, que es lo
- * que esta prueba mide. Exigir 200 obligaría a montar datos de negocio y
- * convertiría la prueba de permisos en otra cosa.
- */
-
-type Rol = 'admin' | 'coordinador' | 'operador';
+/** Pruebas integrales de los permisos dinámicos de Sprint 7. */
+type RolBase = 'admin' | 'coordinador' | 'operador';
 
 interface Regla {
   metodo: 'GET' | 'POST' | 'PUT';
   ruta: string;
-  /** Roles que SÍ deben alcanzar el recurso. */
-  permitidos: Rol[];
+  permitidos: RolBase[];
 }
 
 const MATRIZ: Regla[] = [
-  { metodo: 'GET', ruta: '/api/proveedores', permitidos: ['coordinador'] },
-  { metodo: 'GET', ruta: '/api/pedidos', permitidos: ['coordinador'] },
+  { metodo: 'GET', ruta: '/api/proveedores', permitidos: ['admin', 'coordinador'] },
+  { metodo: 'GET', ruta: '/api/pedidos', permitidos: ['admin', 'coordinador', 'operador'] },
   { metodo: 'GET', ruta: '/api/kpis', permitidos: ['admin', 'coordinador'] },
   { metodo: 'GET', ruta: '/api/eventos', permitidos: ['admin', 'coordinador'] },
-  { metodo: 'GET', ruta: '/api/parametros', permitidos: ['admin', 'coordinador'] },
+  // Regla explícita del Sprint 7: Coordinador pierde esta lectura.
+  { metodo: 'GET', ruta: '/api/parametros', permitidos: ['admin'] },
   { metodo: 'POST', ruta: '/api/parametros', permitidos: ['admin'] },
-  { metodo: 'GET', ruta: '/api/gateways', permitidos: ['admin', 'coordinador'] },
-  { metodo: 'GET', ruta: '/api/descargas/activas', permitidos: ['admin', 'coordinador'] },
-  { metodo: 'POST', ruta: '/api/descargas/iniciar', permitidos: ['coordinador', 'operador'] },
-  { metodo: 'POST', ruta: '/api/llegadas', permitidos: ['coordinador', 'operador'] },
-  { metodo: 'POST', ruta: '/api/llegadas/control-ausencias', permitidos: ['admin', 'coordinador'] },
-  // Sprint 5: la administracion de usuarios es exclusiva del Administrador.
-  // Es el modulo que decide quien entra al sistema y con que rol, asi que
-  // que un Coordinador no lo alcance es parte del control de acceso que
-  // este caso mide. Van GET y POST: todas las rutas del modulo comparten el
-  // mismo router.use(verificarToken, autorizarRoles('Administrador')), asi
-  // que con dos alcanza para demostrar que el modulo entero esta cerrado.
+  { metodo: 'GET', ruta: '/api/gateways', permitidos: ['admin', 'coordinador', 'operador'] },
+  { metodo: 'GET', ruta: '/api/descargas/activas', permitidos: ['admin', 'coordinador', 'operador'] },
+  { metodo: 'POST', ruta: '/api/descargas/iniciar', permitidos: ['admin', 'coordinador', 'operador'] },
+  { metodo: 'POST', ruta: '/api/llegadas', permitidos: ['admin', 'coordinador', 'operador'] },
+  { metodo: 'POST', ruta: '/api/llegadas/control-ausencias', permitidos: ['admin', 'coordinador', 'operador'] },
+  { metodo: 'GET', ruta: '/api/cola', permitidos: ['admin', 'coordinador', 'operador'] },
   { metodo: 'GET', ruta: '/api/usuarios', permitidos: ['admin'] },
-  { metodo: 'POST', ruta: '/api/usuarios', permitidos: ['admin'] }
+  { metodo: 'GET', ruta: '/api/roles', permitidos: ['admin'] },
+  { metodo: 'GET', ruta: '/api/auth/solo-admin', permitidos: ['admin'] }
 ];
 
-const ROLES: Rol[] = ['admin', 'coordinador', 'operador'];
+const ROLES_BASE: RolBase[] = ['admin', 'coordinador', 'operador'];
 
-/** Llamada sin cabecera Authorization, para comprobar el 401. */
 const sinToken = async (metodo: string, ruta: string): Promise<number> => {
   const respuesta = await fetch(`${BASE_URL}${ruta}`, {
     method: metodo,
@@ -66,62 +52,115 @@ const sinToken = async (metodo: string, ruta: string): Promise<number> => {
 export const casosDeRbac: DefinicionCaso[] = [
   {
     id: 'PI-05',
-    titulo: 'Control de acceso basado en roles sobre los endpoints protegidos',
-    reglas: 'HU-004, HU-005 · CU-04, CU-05',
+    titulo: 'Matriz de permisos dinámicos para los tres roles base',
+    reglas: 'Sprint 7 — matriz RBAC',
     ejecutar: async (anotar) => {
-      // 1. Los tres roles obtienen token con sus credenciales sembradas.
-      for (const rol of ROLES) {
+      for (const rol of ROLES_BASE) {
         const token = await iniciarSesion(rol);
-        verificar(token.length > 0, `El rol ${rol} obtiene un token en el login`);
+        verificar(token.length > 0, `${rol} obtiene un ACCESS token`);
       }
-      anotar('Los tres roles autenticaron correctamente contra POST /api/auth/login.');
 
-      // 2. Sin token, todo endpoint protegido responde 401 y ninguno filtra datos.
       let sinAutorizacion = 0;
       for (const regla of MATRIZ) {
-        const estado = await sinToken(regla.metodo, regla.ruta);
-        verificarIgual(estado, 401, `${regla.metodo} ${regla.ruta} sin token responde 401`);
+        verificarIgual(
+          await sinToken(regla.metodo, regla.ruta),
+          401,
+          `${regla.metodo} ${regla.ruta} sin token responde 401`
+        );
         sinAutorizacion += 1;
       }
-      anotar(`Los ${sinAutorizacion} endpoints protegidos responden 401 cuando no hay token.`);
 
-      // 3. Matriz completa: cada rol contra cada endpoint.
-      let denegados = 0;
       let permitidos = 0;
-
+      let denegados = 0;
       for (const regla of MATRIZ) {
-        // fetch rechaza un GET con cuerpo, asi que solo los POST y PUT lo llevan.
         const cuerpo = regla.metodo === 'GET' ? undefined : {};
-
-        for (const rol of ROLES) {
+        for (const rol of ROLES_BASE) {
           const { estado } = await api(regla.metodo, regla.ruta, rol, cuerpo);
-          const deberiaPasar = regla.permitidos.includes(rol);
-
-          if (deberiaPasar) {
-            verificar(
-              estado !== 403,
-              `${rol} SÍ debe alcanzar ${regla.metodo} ${regla.ruta} (recibió 403)`,
-              estado
-            );
+          if (regla.permitidos.includes(rol)) {
+            verificar(estado !== 403, `${rol} alcanza ${regla.metodo} ${regla.ruta}`, estado);
             permitidos += 1;
           } else {
-            verificarIgual(
-              estado,
-              403,
-              `${rol} NO debe alcanzar ${regla.metodo} ${regla.ruta}`
-            );
+            verificarIgual(estado, 403, `${rol} no alcanza ${regla.metodo} ${regla.ruta}`);
             denegados += 1;
           }
         }
       }
 
-      anotar(`Matriz verificada: ${permitidos} combinaciones rol-endpoint permitidas y ` +
-        `${denegados} denegadas con 403, sobre ${MATRIZ.length} endpoints y ${ROLES.length} roles.`);
-      anotar('El Operador no alcanza ningún endpoint de administración ni de consulta de ' +
-        'indicadores; el Administrador no registra llegadas ni inicia descargas.');
-      anotar('La administración de usuarios (/api/usuarios) solo la alcanza el ' +
-        'Administrador: ni el Coordinador ni el Operador pueden crear cuentas, ' +
-        'cambiar roles ni exigir la verificación en dos pasos.');
+      anotar(`${sinAutorizacion} rutas rechazaron solicitudes sin token.`);
+      anotar(`${permitidos} combinaciones permitidas y ${denegados} denegadas.`);
+      anotar('Coordinador no puede leer /api/parametros: la guía lo asigna al permiso roles.');
+    }
+  },
+  {
+    id: 'PI-06',
+    titulo: 'Rol personalizado, revocación inmediata y baja protegida',
+    reglas: 'Sprint 7 — roles dinámicos',
+    ejecutar: async (anotar) => {
+      const sufijo = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      const nombreRol = `${PREFIJO_RBAC_QA}${sufijo}`;
+      const correo = `qa-rbac-${sufijo}@prueba.local`;
+      let rolId: string | undefined;
+      let usuarioId: string | undefined;
+
+      try {
+        const rolCreado = await api<{ rol: { _id: string } }>('POST', '/api/roles', 'admin', {
+          nombreRol,
+          descripcion: 'Rol temporal de la prueba funcional RBAC',
+          permisos: ['kpis']
+        });
+        verificarIgual(rolCreado.estado, 201, 'POST /api/roles crea el rol personalizado');
+        rolId = rolCreado.cuerpo.rol._id;
+
+        const usuarioCreado = await api<{ _id: string; roles: Array<{ nombreRol: string }> }>(
+          'POST',
+          '/api/usuarios',
+          'admin',
+          { nombre: 'Usuario RBAC QA', correo, password: 'PruebaRBAC123', roles: [rolId] }
+        );
+        verificarIgual(usuarioCreado.estado, 201, 'POST /api/usuarios asigna el rol personalizado');
+        verificarIgual(usuarioCreado.cuerpo.roles[0]?.nombreRol, nombreRol, 'GET/POST devuelve roles poblados');
+        usuarioId = usuarioCreado.cuerpo._id;
+
+        const token = await iniciarSesionConCredenciales(correo, 'PruebaRBAC123');
+        verificarIgual((await apiConToken('GET', '/api/kpis', token)).estado, 200, 'Rol kpis obtiene 200');
+        verificarIgual(
+          (await apiConToken('GET', '/api/proveedores', token)).estado,
+          403,
+          'Rol kpis recibe 403 fuera de su permiso'
+        );
+
+        verificarIgual(
+          (await api('DELETE', `/api/roles/${rolId}`, 'admin')).estado,
+          409,
+          'No se puede desactivar un rol asignado a un usuario activo'
+        );
+
+        verificarIgual(
+          (
+            await api('PUT', `/api/roles/${rolId}`, 'admin', {
+              nombreRol,
+              descripcion: 'Rol temporal revocado',
+              permisos: ['cola']
+            })
+          ).estado,
+          200,
+          'PUT modifica permisos del rol'
+        );
+        verificarIgual(
+          (await apiConToken('GET', '/api/kpis', token)).estado,
+          403,
+          'El mismo token pierde kpis inmediatamente'
+        );
+        verificarIgual(
+          (await apiConToken('GET', '/api/cola', token)).estado,
+          200,
+          'El mismo token gana cola según la base de datos'
+        );
+        anotar('La revocación se comprobó con el mismo JWT: checkPermission recargó MongoDB.');
+      } finally {
+        if (usuarioId) await api('DELETE', `/api/usuarios/${usuarioId}`, 'admin');
+        if (rolId) await api('DELETE', `/api/roles/${rolId}`, 'admin');
+      }
     }
   }
 ];

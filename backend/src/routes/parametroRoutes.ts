@@ -6,24 +6,23 @@ import {
   listarParametros
 } from '../controllers/parametroController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
 // Todas las rutas piden token valido (401).
 router.use(verificarToken);
 
-// Los parametros cambian como se comporta el sistema entero: un margen de
-// tolerancia mal puesto reclasifica todas las llegadas. Por eso escribir es
-// del Administrador, y el Coordinador solo puede leerlos, porque su modulo
-// necesita mostrar con que horario y tolerancias se esta trabajando.
-router.get('/', autorizarRoles('Administrador', 'Coordinador'), listarParametros);
+// Regla explicita del Sprint 7: parametros es permiso roles incluso en GET.
+// Por ello Coordinador pierde esta lectura; no se le concede roles solo para
+// conservarla, porque seria un privilegio administrativo innecesario.
+router.get('/', checkPermission('roles'), listarParametros);
 
-router.post('/', autorizarRoles('Administrador'), crearParametro);
+router.post('/', checkPermission('roles'), crearParametro);
 
-router.put('/:id', autorizarRoles('Administrador'), actualizarParametro);
+router.put('/:id', checkPermission('roles'), actualizarParametro);
 
 // DELETE es borrado logico: pasa activo a false, no borra el documento.
-router.delete('/:id', autorizarRoles('Administrador'), inactivarParametro);
+router.delete('/:id', checkPermission('roles'), inactivarParametro);
 
 export default router;
