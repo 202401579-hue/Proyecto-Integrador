@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { obtenerSesion, obtenerRutaPorRol } from "@/lib/session";
+import { obtenerSesion } from "@/lib/session";
+import { rutaInicial } from "@/lib/permisos";
 
 export default function PaginaRedireccion() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function PaginaRedireccion() {
       return;
     }
 
-    router.replace(obtenerRutaPorRol(sesion.rol));
+    router.replace(rutaInicial(sesion.permisos));
   }, [router]);
 
   return null;

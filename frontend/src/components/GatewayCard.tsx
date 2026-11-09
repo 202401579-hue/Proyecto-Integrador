@@ -1,7 +1,6 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import type { Rol } from "@/lib/session";
 import { fondoGateway, type Descarga, type Gateway } from "@/lib/estadosGateway";
 
 const AZUL = "#2f5fb3";
@@ -13,7 +12,10 @@ const CELESTE = "#0dcaf0";
 interface GatewayCardProps {
   gateway: Gateway;
   descarga?: Descarga;
-  rol: Rol;
+  /** Tablero de descargas o de mantenimiento (ver GatewaysTablero). */
+  modo: "anden" | "mantenimiento";
+  /** Tiene el permiso `descargas` y está en el tablero de descargas. */
+  puedeDescargar: boolean;
   // Hora actual en ms, la pasa el tablero en cada refresco: con ella se
   // calcula cuánto lleva la descarga (solo para mostrar; la duración
   // oficial la calcula el backend al finalizar).
@@ -81,7 +83,8 @@ function FlechaEntrada() {
 export default function GatewayCard({
   gateway,
   descarga,
-  rol,
+  modo,
+  puedeDescargar,
   ahora,
   ocupadaEnAccion,
   seleccionada,
@@ -92,8 +95,10 @@ export default function GatewayCard({
   onCambiarEstado,
 }: GatewayCardProps) {
   const esConstruccion = gateway.tipoCargaPermitida === "construcción";
-  const esCoordinador = rol === "Coordinador";
-  const esAdministrador = rol === "Administrador";
+  // Los botones salen del modo de la pantalla y del permiso, no del nombre
+  // de un rol. Mantenimiento lo autoriza `gateways` en el backend.
+  const esCoordinador = puedeDescargar;
+  const esAdministrador = modo === "mantenimiento";
   const { estado } = gateway;
 
 
@@ -186,7 +191,7 @@ export default function GatewayCard({
         </div>
       </div>
 
-      {/* Acción debajo de la puerta, según rol y estado */}
+      {/* Acción debajo de la puerta, según permiso y estado */}
       {esCoordinador && estado === "LIBRE" && !seleccionada && (
         <button
           type="button"

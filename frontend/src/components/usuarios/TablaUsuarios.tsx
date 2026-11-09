@@ -139,7 +139,7 @@ export default function TablaUsuarios({
                 <tr>
                   <th>Nombre</th>
                   <th>Correo</th>
-                  <th>Rol</th>
+                  <th>Roles</th>
                   <th>MFA obligatorio</th>
                   <th>MFA configurado</th>
                   <th />
@@ -161,7 +161,19 @@ export default function TablaUsuarios({
                       )}
                     </td>
                     <td>{usuario.correo}</td>
-                    <td>{usuario.rol}</td>
+                    <td>
+                      <div className="d-flex flex-wrap gap-1">
+                        {usuario.roles.length === 0 ? (
+                          <span className="text-muted">—</span>
+                        ) : (
+                          usuario.roles.map((rol) => (
+                            <span className="badge bg-primary" key={rol._id}>
+                              {rol.nombreRol}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <BadgeObligatorio obligatorio={usuario.mfaObligatorio} />
                     </td>

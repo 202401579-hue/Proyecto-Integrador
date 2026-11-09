@@ -3,8 +3,8 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Script from "next/script";
-import { obtenerRutaPorRol, sesionDesdeToken } from "@/lib/session";
-import { puedeAcceder } from "@/lib/rutasCompartidas";
+import { sesionDesdeToken } from "@/lib/session";
+import { puedeAcceder } from "@/lib/permisosRutas";
 import NavbarPrivado from "@/components/NavbarPrivado";
 import Sidebar from "@/components/Sidebar";
 import { SesionProvider } from "@/components/SesionProvider";
@@ -25,22 +25,21 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
   const token = useSyncExternalStore(suscribirseAlToken, leerToken, sinTokenEnServidor);
 
   const sesion = sesionDesdeToken(token);
-  const rutaDelRol = sesion ? obtenerRutaPorRol(sesion.rol) : null;
 
-  // puedeAcceder combina el prefijo de la sección del rol con las rutas
-  // compartidas (ver lib/rutasCompartidas.ts, por ejemplo /cola, que no
-  // pertenece al prefijo de ningún rol pero los tres pueden ver).
-  const dentroDeSuSeccion = !!sesion && puedeAcceder(sesion.rol, pathname);
+  // El guard mira los permisos que trae el token (lib/permisosRutas.ts). Es
+  // solo comodidad de pantalla: el backend vuelve a comprobarlos en cada
+  // petición y responde 403 aunque alguien salte este guard.
+  const dentroDeSuSeccion = !!sesion && puedeAcceder(sesion.permisos, pathname);
 
   useEffect(() => {
     if (!montado) return;
 
-    if (!rutaDelRol) {
+    if (!sesion) {
       router.replace("/login");
     } else if (!dentroDeSuSeccion) {
-      router.replace(rutaDelRol);
+      router.replace("/sin-acceso");
     }
-  }, [montado, rutaDelRol, dentroDeSuSeccion, router]);
+  }, [montado, sesion, dentroDeSuSeccion, router]);
 
   useEffect(() => {
     const revalidar = (evento: PageTransitionEvent) => {
@@ -65,9 +64,9 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
         strategy="afterInteractive"
       />
       <div className="d-flex" style={{ minHeight: "100vh" }}>
-        <Sidebar rol={sesion.rol} />
+        <Sidebar permisos={sesion.permisos} />
         <div className="flex-grow-1 d-flex flex-column">
-          <NavbarPrivado rol={sesion.rol} />
+          <NavbarPrivado roles={sesion.roles} />
           <main
             className="container-fluid py-4 flex-grow-1"
             style={{ backgroundColor: "#f8f9fc" }}
