@@ -6,7 +6,7 @@ import { useColaRefresco } from "@/hooks/useColaRefresco";
 
 /**
  * Tablero de la cola de espera (Sprint 6). Se usa en /cola, la misma
- * pantalla para los tres roles (ver lib/rutasCompartidas.ts).
+ * pantalla para los tres roles (permiso `cola`, ver lib/permisosRutas.ts).
  *
  * Las tarjetas se dibujan estrictamente en el orden que manda la API: este
  * componente nunca las reordena del lado del cliente.

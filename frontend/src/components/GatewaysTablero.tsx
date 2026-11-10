@@ -119,9 +119,23 @@ function tiempoEsperando(iso: string | null | undefined, ahora: number): string 
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
-export default function GatewaysTablero() {
-  const { rol } = useSesion();
-  const esCoordinador = rol === "Coordinador";
+interface GatewaysTableroProps {
+  /**
+   * "anden": tablero de descargas (/coordinador). "mantenimiento": poner
+   * gateways fuera de servicio y volver a habilitarlos (/administrador/gateways).
+   */
+  modo?: "anden" | "mantenimiento";
+}
+
+export default function GatewaysTablero({ modo = "anden" }: GatewaysTableroProps) {
+  const { permisos } = useSesion();
+  const esAnden = modo === "anden";
+  // Los botones de descarga dependen del permiso `descargas` (ya no del rol
+  // Coordinador): así el Operador también los ve. El backend lo vuelve a
+  // comprobar en /api/descargas.
+  const puedeDescargar = esAnden && permisos.includes("descargas");
+  // La cola de pedidos del panel de descarga necesita GET /api/pedidos.
+  const puedeVerPedidos = puedeDescargar && permisos.includes("pedidos");
 
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [descargas, setDescargas] = useState<Descarga[]>([]);
@@ -150,7 +164,7 @@ export default function GatewaysTablero() {
   // Panel de camiones para iniciar una descarga: se muestra y oculta con un
   // estado de React, no con el modal de Bootstrap (su JS se carga aparte).
   const [gatewayElegido, setGatewayElegido] = useState<string | null>(null);
-  // La cola de espera (solo Coordinador). La usan el panel de la cola y el de
+  // La cola de espera (permiso descargas). La usan el panel de la cola y el de
   // iniciar descarga.
   const [pedidos, setPedidos] = useState<PedidoElegible[]>([]);
 
@@ -161,7 +175,7 @@ export default function GatewaysTablero() {
       const [rg, rd, rp] = await Promise.all([
         llamar("/api/gateways"),
         llamar("/api/descargas/activas"),
-        esCoordinador ? llamar("/api/pedidos") : Promise.resolve(null),
+        puedeVerPedidos ? llamar("/api/pedidos") : Promise.resolve(null),
       ]);
 
       setAhora(Date.now());
@@ -190,7 +204,7 @@ export default function GatewaysTablero() {
     } finally {
       setCargandoInicial(false);
     }
-  }, [esCoordinador]);
+  }, [puedeVerPedidos]);
 
   // Carga al montar y refresco suave cada 15 s, para que el tablero refleje
   // lo que hicieron otros usuarios sin recargar la página.
@@ -320,7 +334,7 @@ export default function GatewaysTablero() {
       <div className="d-flex flex-wrap justify-content-between align-items-end gap-3">
         <div>
           <h1 className="h3 mb-1">
-            {esCoordinador ? "Andén de descarga" : "Mantenimiento de gateways"}
+            {esAnden ? "Andén de descarga" : "Mantenimiento de gateways"}
           </h1>
           <p className="mb-0" style={{ color: "#5b6472" }}>
             {cargandoInicial
@@ -380,7 +394,8 @@ export default function GatewaysTablero() {
                   <GatewayCard
                     gateway={gateway}
                     descarga={descarga}
-                    rol={rol}
+                    modo={modo}
+                    puedeDescargar={puedeDescargar}
                     ahora={ahora}
                     ocupadaEnAccion={gatewayEnAccion === gateway._id}
                     seleccionada={gatewayElegido === gateway._id}
@@ -410,8 +425,8 @@ export default function GatewaysTablero() {
         </div>
       </section>
 
-      {/* Camiones que pueden entrar a la bahía elegida (solo Coordinador) */}
-      {esCoordinador && elegido && (
+      {/* Camiones que pueden entrar a la bahía elegida (permiso descargas) */}
+      {puedeDescargar && elegido && (
         <section className="d-flex flex-column gap-3">
           <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span className="fw-bold">
@@ -502,8 +517,8 @@ export default function GatewaysTablero() {
         </section>
       )}
 
-      {/* Cola de espera (solo Coordinador): primero en llegar, primero en descargar */}
-      {esCoordinador && !cargandoInicial && (
+      {/* Cola de espera (permiso descargas): primero en llegar, primero en descargar */}
+      {puedeDescargar && !cargandoInicial && (
         <section
           className="bg-white p-3 p-md-4"
           style={{ borderRadius: 16, boxShadow: "0 1px 2px rgba(16,24,40,0.06), 0 6px 16px rgba(16,24,40,0.07)" }}

@@ -22,6 +22,11 @@ const ACCIONES_EVENTO = [
   "INGRESO_COLA",
   "AGING_APLICADO",
   "PROMOCION_AUTOMATICA_GATEWAY",
+  // Sprint 7: roles y permisos.
+  "ROL_CREADO",
+  "ROL_MODIFICADO",
+  "ROL_DESACTIVADO",
+  "ROL_ASIGNADO_USUARIO",
 ] as const;
 
 type AccionEvento = (typeof ACCIONES_EVENTO)[number];
@@ -29,7 +34,9 @@ type AccionEvento = (typeof ACCIONES_EVENTO)[number];
 type Usuario = {
   _id: string;
   nombre: string;
-  rol: string;
+  /** Desde el Sprint 7 el backend puebla `roles` (puede venir vacío). */
+  roles?: Array<{ nombreRol?: string } | string>;
+  rol?: string;
 };
 
 type PedidoResumido = {
@@ -57,6 +64,17 @@ function formatearFechaHora(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Roles del usuario del evento, como texto (vacío si el backend no los manda). */
+function nombresDeRoles(usuario: Usuario): string {
+  if (Array.isArray(usuario.roles)) {
+    return usuario.roles
+      .map((r) => (typeof r === "string" ? "" : r?.nombreRol ?? ""))
+      .filter(Boolean)
+      .join(", ");
+  }
+  return usuario.rol ?? "";
 }
 
 /** true cuando el evento lo disparó la promoción automática de la cola, no una persona. */
@@ -104,6 +122,19 @@ function resumirDetalles(evento: Evento): string {
         `Gateway ${String(d.numeroGateway ?? "—")} (carga ${String(d.tipoCarga ?? "—")}) · ` +
         `prioridad ${String(d.prioridadCalculada ?? "—")} · ${String(d.minutosEnEspera ?? "—")} min en espera`
       );
+    case "ROL_CREADO":
+      return `Rol "${String(d.nombreRol ?? "—")}" creado`;
+    case "ROL_MODIFICADO":
+      return `Rol "${String(d.nombreRol ?? "—")}" modificado`;
+    case "ROL_DESACTIVADO":
+      return `Rol "${String(d.nombreRol ?? "—")}" desactivado`;
+    case "ROL_ASIGNADO_USUARIO": {
+      // Los detalles pueden venir incompletos: todo se lee de forma defensiva.
+      const usuario = (d.usuario ?? {}) as { correo?: unknown };
+      const lista = (valor: unknown) =>
+        Array.isArray(valor) && valor.length > 0 ? valor.map(String).join(", ") : "ninguno";
+      return `${String(usuario.correo ?? "Usuario")}: roles ${lista(d.rolesAnteriores)} → ${lista(d.rolesNuevos)}`;
+    }
     default:
       return "—";
   }
@@ -119,6 +150,10 @@ const ETIQUETA_ACCION: Record<AccionEvento, string> = {
   INGRESO_COLA: "Ingreso a la cola",
   AGING_APLICADO: "Aging aplicado",
   PROMOCION_AUTOMATICA_GATEWAY: "Promoción automática a gateway",
+  ROL_CREADO: "Rol creado",
+  ROL_MODIFICADO: "Rol modificado",
+  ROL_DESACTIVADO: "Rol desactivado",
+  ROL_ASIGNADO_USUARIO: "Roles asignados a usuario",
 };
 
 /**
@@ -314,7 +349,9 @@ export default function BitacoraEventos() {
                     {evento.usuarioId ? (
                       <>
                         {evento.usuarioId.nombre}
-                        <span className="text-muted small"> ({evento.usuarioId.rol})</span>
+                        {nombresDeRoles(evento.usuarioId) && (
+                          <span className="text-muted small"> ({nombresDeRoles(evento.usuarioId)})</span>
+                        )}
                       </>
                     ) : (
                       <span className="text-muted">—</span>
