@@ -5,6 +5,8 @@ import {
   leerPedido,
   ponerGatewayEn
 } from './escenario';
+import { Puntualidad } from '../models/Pedido';
+import { prioridadBaseDe } from '../cola/prioridad';
 
 /**
  * CP-05 a CP-09 — Asignación de bahías y ciclo de descarga.
@@ -20,13 +22,28 @@ interface RespuestaDescarga {
   _id?: string;
 }
 
-/** Deja un pedido con llegada registrada y listo para recibir bahía. */
-const pedidoEsperando = async (tipo: 'general' | 'construcción', llegadaHaceMinutos: number) =>
+/**
+ * Deja un pedido con llegada registrada y listo para recibir bahía, con el
+ * mismo formato que deja POST /api/llegadas en el flujo real (Sprint 6):
+ * estado EN COLA, con su puntualidad, fechaHoraIngresoCola igual a la
+ * llegada, minutosEnEspera en 0 y prioridadCalculada en la base de esa
+ * puntualidad. Antes se guardaba con estado: 'A TIEMPO' (el formato previo
+ * al Sprint 4, donde el estado llevaba la clasificación): con ese formato
+ * services/cola.ts no lo veía nunca, porque solo lee estado: 'EN COLA'.
+ */
+const pedidoEsperando = async (
+  tipo: 'general' | 'construcción',
+  llegadaHaceMinutos: number,
+  puntualidad: Puntualidad = 'A TIEMPO'
+) =>
   crearPedidoDePrueba({
     inicioEnMinutos: -llegadaHaceMinutos - 5,
     tipoProducto: tipo,
-    estado: 'A TIEMPO',
-    llegadaEnMinutos: -llegadaHaceMinutos
+    estado: 'EN COLA',
+    llegadaEnMinutos: -llegadaHaceMinutos,
+    puntualidad,
+    minutosEnEspera: 0,
+    prioridadCalculada: prioridadBaseDe(puntualidad)
   });
 
 /** Inicia una descarga por la API y devuelve el id de la descarga creada. */

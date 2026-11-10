@@ -1,12 +1,11 @@
 "use client";
 
-import { Rol } from "@/lib/session";
-
 interface NavbarPrivadoProps {
-  rol: Rol;
+  /** Nombres de los roles del usuario (puede tener varios). */
+  roles: string[];
 }
 
-export default function NavbarPrivado({ rol }: NavbarPrivadoProps) {
+export default function NavbarPrivado({ roles }: NavbarPrivadoProps) {
   return (
     <nav
       className="navbar navbar-light bg-white shadow-sm px-4 d-flex justify-content-between"
@@ -15,8 +14,16 @@ export default function NavbarPrivado({ rol }: NavbarPrivadoProps) {
       <span className="navbar-brand mb-0 h5 text-dark fw-semibold">
         Sistema de Gestión Logística
       </span>
-      <span className="badge bg-primary px-3 py-2 align-self-center">
-        Rol: {rol}
+      <span className="d-flex gap-2 align-self-center flex-wrap justify-content-end">
+        {roles.length === 0 ? (
+          <span className="badge bg-secondary px-3 py-2">Sin rol</span>
+        ) : (
+          roles.map((rol) => (
+            <span className="badge bg-primary px-3 py-2" key={rol}>
+              {roles.length === 1 ? `Rol: ${rol}` : rol}
+            </span>
+          ))
+        )}
       </span>
     </nav>
   );

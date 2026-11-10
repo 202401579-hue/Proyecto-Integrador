@@ -1,4 +1,4 @@
-import { Rol } from '../models/Usuario';
+import { Permiso } from '../models/Role';
 
 /**
  * Tipos de token que emite el sistema.
@@ -14,12 +14,14 @@ export const TIPO_TOKEN_TEMPORAL = 'MFA_TEMP';
 
 /**
  * Token definitivo: el que habilita las rutas operativas.
- * Lleva los tres claims de siempre (id, correo y rol) mas el tipo.
+ * Lleva roles y permisos informativos para el frontend. La autorizacion
+ * real siempre vuelve a consultar MongoDB mediante checkPermission.
  */
 export interface PayloadAcceso {
   id: string;
   correo: string;
-  rol: Rol;
+  roles: string[];
+  permisos: Permiso[];
   type: typeof TIPO_TOKEN_ACCESO;
   iat?: number;
   exp?: number;
@@ -28,8 +30,8 @@ export interface PayloadAcceso {
 /**
  * Token temporal: solo sirve para terminar de autenticarse.
  *
- * NO lleva rol a proposito. Aunque algo lo dejara pasar por error, no hay
- * de donde sacar un rol que autorizar: la ausencia del claim es una segunda
+ * NO lleva roles ni permisos a proposito. Aunque algo lo dejara pasar por error,
+ * no hay de donde sacar permisos que autorizar: la ausencia del claim es una segunda
  * barrera, independiente de la comprobacion del tipo.
  *
  * El jti (JWT ID) es un identificador unico de este token concreto. Sirve
@@ -48,13 +50,15 @@ export interface PayloadTemporal {
 /**
  * Lo que puede salir de jwt.verify antes de saber con cual de los dos se
  * esta tratando. Es una union discriminada por `type`: TypeScript no deja
- * leer `rol` sin haber comprobado antes que el token es de acceso.
+ * leer los permisos sin haber comprobado antes que el token es de acceso.
  */
 export type PayloadToken = PayloadAcceso | PayloadTemporal;
 
 /** Estrecha la union al token de acceso. */
 export const esPayloadDeAcceso = (payload: PayloadToken): payload is PayloadAcceso =>
-  payload.type === TIPO_TOKEN_ACCESO;
+  payload.type === TIPO_TOKEN_ACCESO &&
+  Array.isArray((payload as Partial<PayloadAcceso>).roles) &&
+  Array.isArray((payload as Partial<PayloadAcceso>).permisos);
 
 /** Estrecha la union al token temporal. */
 export const esPayloadTemporal = (payload: PayloadToken): payload is PayloadTemporal =>

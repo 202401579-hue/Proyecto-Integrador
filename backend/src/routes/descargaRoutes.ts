@@ -5,7 +5,7 @@ import {
   listarDescargasActivas
 } from '../controllers/descargaController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
@@ -16,15 +16,15 @@ router.use(verificarToken);
 //
 // Inicia la descarga desde el tablero: la aprieta el Coordinador, y
 // tambien el Operador porque es quien esta fisicamente en el anden.
-router.post('/iniciar', autorizarRoles('Coordinador', 'Operador'), iniciarDescarga);
+router.post('/iniciar', checkPermission('descargas'), iniciarDescarga);
 
 // POST /api/descargas/finalizar
-router.post('/finalizar', autorizarRoles('Coordinador', 'Operador'), finalizarDescarga);
+router.post('/finalizar', checkPermission('descargas'), finalizarDescarga);
 
 // GET /api/descargas/activas
 //
 // Para el tablero de gateways: Administrador y Coordinador la necesitan
 // para saber que bahia esta ocupada por cual pedido.
-router.get('/activas', autorizarRoles('Administrador', 'Coordinador'), listarDescargasActivas);
+router.get('/activas', checkPermission('descargas'), listarDescargasActivas);
 
 export default router;

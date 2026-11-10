@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { conectarDB } from '../config/database';
 import Parametro from '../models/Parametro';
 import { CLAVES_PARAMETROS } from '../services/configuracionOperativa';
+import { sembrarParametrosCola } from './seedParametrosCola';
 
 dotenv.config();
 
@@ -88,6 +89,10 @@ const sembrar = async (): Promise<void> => {
   console.log(
     '[Seed parametros]              hasta 60 min (TARDIO); pasados los 60 min, AUSENTE.'
   );
+
+  // Parametros de la cola (Sprint 6): por upsert, no por el deleteMany+create
+  // de arriba (ver seedParametrosCola.ts para el por que).
+  await sembrarParametrosCola();
 
   await mongoose.disconnect();
   console.log('[Seed parametros] Listo.');

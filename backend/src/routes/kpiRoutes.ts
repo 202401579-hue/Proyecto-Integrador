@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { obtenerKpis } from '../controllers/kpiController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
 // Igual que la bitácora de eventos: es información de supervisión, así que
 // la ven el Administrador y el Coordinador. El Operador recibe 403.
-router.use(verificarToken, autorizarRoles('Administrador', 'Coordinador'));
+router.use(verificarToken, checkPermission('kpis'));
 
 /**
  * GET /api/kpis

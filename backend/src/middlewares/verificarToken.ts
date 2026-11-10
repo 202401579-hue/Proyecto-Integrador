@@ -60,12 +60,10 @@ export const verificarToken = (
   }
 
   // Cualquier otra cosa que no sea un token de acceso se rechaza, aunque la
-  // firma sea valida. Es deliberadamente estricto: incluye los tokens que
-  // se emitieron antes del Sprint 5, que no llevan el claim `type`. Dejarlos
-  // pasar obligaria a mantener para siempre una excepcion del estilo "si no
-  // dice el tipo, asumo que es de acceso", y esa excepcion es exactamente la
-  // puerta que este cambio vino a cerrar. El costo es que una sesion abierta
-  // de antes recibe un 401 y tiene que volver a entrar, una sola vez.
+  // firma sea valida. Es deliberadamente estricto: también rechaza tokens
+  // heredados que no llevan el claim permisos de Sprint 7. Dejarlos pasar
+  // obligaría a mantener excepciones para sesiones viejas; el costo es un
+  // único 401 y volver a iniciar sesión.
   if (!esPayloadDeAcceso(payload)) {
     res.status(401).json({ mensaje: 'Token inválido o expirado' });
     return;

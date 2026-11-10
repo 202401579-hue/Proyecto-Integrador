@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, ChangeEvent, FormEvent } from "react";
+import { useEffect, useState, ChangeEvent, FormEvent } from "react";
 import { useSesion } from "@/components/SesionProvider";
-import { llamarApi, ROLES, type Usuario } from "@/lib/usuarios";
-import type { Rol } from "@/lib/session";
+import { llamarApi, type Usuario } from "@/lib/usuarios";
+import { listarRoles, type RolSistema } from "@/lib/roles";
 
 /**
  * Alta y edición de usuarios (Sprint 5).
@@ -47,15 +47,52 @@ export default function UserForm({ usuario, onGuardado, onCancelar }: UserFormPr
   const [nombre, setNombre] = useState(usuario?.nombre ?? "");
   const [correo, setCorreo] = useState(usuario?.correo ?? "");
   const [password, setPassword] = useState("");
-  // Al crear se arranca con el rol de menos permisos: si alguien guarda sin
-  // mirar, el error es de menos y no de más.
-  const [rol, setRol] = useState<Rol>(usuario?.rol ?? "Operador");
+  // Ids de los roles marcados. Al crear no hay ninguno marcado: el
+  // administrador tiene que elegir a propósito.
+  const [rolesElegidos, setRolesElegidos] = useState<string[]>(
+    usuario?.roles.map((r) => r._id) ?? []
+  );
+  // Roles disponibles: salen de GET /api/roles?activo=true al montar, no de
+  // una lista escrita en el código. Un rol recién creado aparece solo.
+  const [rolesDisponibles, setRolesDisponibles] = useState<RolSistema[] | null>(null);
+  const [errorRoles, setErrorRoles] = useState("");
   const [mfaObligatorio, setMfaObligatorio] = useState(usuario?.mfaObligatorio ?? false);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
   const esSuPropiaCuenta = editando && usuario._id === sesion.id;
+
+  useEffect(() => {
+    let vigente = true;
+    const pedir = async () => {
+      const resultado = await listarRoles(false);
+      if (!vigente) return;
+      if (resultado.ok) {
+        setRolesDisponibles(resultado.datos);
+      } else {
+        setRolesDisponibles([]);
+        setErrorRoles(resultado.mensaje);
+      }
+    };
+    pedir();
+    return () => {
+      vigente = false;
+    };
+  }, []);
+
+  // Roles que el usuario ya tiene pero que dejaron de estar activos: se
+  // muestran marcados para que se vea el estado real. Guardar con uno de
+  // ellos lo rechaza el backend, y hay que desmarcarlo.
+  const rolesInactivosDelUsuario = (usuario?.roles ?? []).filter(
+    (r) => !rolesDisponibles?.some((d) => d._id === r._id)
+  );
+
+  const alternarRol = (id: string) => {
+    setRolesElegidos((actuales) =>
+      actuales.includes(id) ? actuales.filter((r) => r !== id) : [...actuales, id]
+    );
+  };
 
   /** Devuelve el primer problema que encuentra, o null si está todo bien. */
   const primerProblema = (): string | null => {
@@ -73,6 +110,12 @@ export default function UserForm({ usuario, onGuardado, onCancelar }: UserFormPr
 
     if (password && password.length < LARGO_MINIMO_PASSWORD) {
       return `La contraseña debe tener al menos ${LARGO_MINIMO_PASSWORD} caracteres.`;
+    }
+
+    // Un administrador no puede tocar sus propios roles (el backend responde
+    // 409), así que ahí el campo no se valida ni se envía.
+    if (!esSuPropiaCuenta && rolesElegidos.length === 0) {
+      return "Seleccione al menos un rol.";
     }
 
     return null;
@@ -94,9 +137,11 @@ export default function UserForm({ usuario, onGuardado, onCancelar }: UserFormPr
     const cuerpo: Record<string, unknown> = {
       nombre: nombre.trim(),
       correo: correo.trim(),
-      rol,
       mfaObligatorio,
     };
+    if (!esSuPropiaCuenta) {
+      cuerpo.roles = rolesElegidos;
+    }
     if (password) {
       cuerpo.password = password;
     }
@@ -179,25 +224,45 @@ export default function UserForm({ usuario, onGuardado, onCancelar }: UserFormPr
             </div>
 
             <div className="col-md-6">
-              <label htmlFor="rol" className="form-label">
-                Rol
-              </label>
-              <select
-                id="rol"
-                className="form-select"
-                value={rol}
-                onChange={(e: ChangeEvent<HTMLSelectElement>) => setRol(e.target.value as Rol)}
-              >
-                {ROLES.map((item) => (
-                  <option value={item} key={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-              {esSuPropiaCuenta && (
-                <div className="form-text">
-                  Es su propia cuenta: no puede quitarse el rol de Administrador.
+              <span className="form-label d-block">Roles</span>
+              {rolesDisponibles === null ? (
+                <div className="text-muted small">Cargando roles…</div>
+              ) : errorRoles ? (
+                <div className="alert alert-danger py-2 mb-0">
+                  No se pudieron cargar los roles: {errorRoles}
                 </div>
+              ) : (
+                <div className="border rounded p-2" style={{ maxHeight: 180, overflowY: "auto" }}>
+                  {[...rolesDisponibles, ...rolesInactivosDelUsuario].map((rol) => {
+                    const inactivo = !rolesDisponibles.some((d) => d._id === rol._id);
+                    return (
+                      <div className="form-check" key={rol._id}>
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id={`rol-${rol._id}`}
+                          checked={rolesElegidos.includes(rol._id)}
+                          onChange={() => alternarRol(rol._id)}
+                          disabled={esSuPropiaCuenta}
+                        />
+                        <label className="form-check-label" htmlFor={`rol-${rol._id}`}>
+                          {rol.nombreRol}
+                          {inactivo && <span className="text-muted small"> (inactivo)</span>}
+                        </label>
+                      </div>
+                    );
+                  })}
+                  {rolesDisponibles.length === 0 && (
+                    <div className="text-muted small">No hay roles activos.</div>
+                  )}
+                </div>
+              )}
+              {esSuPropiaCuenta ? (
+                <div className="form-text">
+                  Es su propia cuenta: no puede modificar sus propios roles.
+                </div>
+              ) : (
+                <div className="form-text">Elija uno o varios; al menos uno es obligatorio.</div>
               )}
             </div>
 

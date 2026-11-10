@@ -1,6 +1,7 @@
 import GatewaysTablero from "@/components/GatewaysTablero";
 
-// Pantalla principal del Coordinador después del login: el tablero de gateways.
+// Tablero de gateways y descargas. Los botones de descarga dependen del permiso
+// `descargas`, así que también los ve el Operador.
 export default function PaginaCoordinador() {
-  return <GatewaysTablero />;
+  return <GatewaysTablero modo="anden" />;
 }

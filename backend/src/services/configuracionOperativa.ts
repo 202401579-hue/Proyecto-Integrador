@@ -27,7 +27,15 @@ export const CLAVES_PARAMETROS = {
   // horario ni una tolerancia, pero vive aca para que se lea igual que los
   // demas: con obtenerConfiguracionOperativa(), con cache y valor por
   // defecto, en lugar de consultar la coleccion parametros directamente.
-  numeroEquipo: 'NUMERO_EQUIPO'
+  numeroEquipo: 'NUMERO_EQUIPO',
+  // Sprint 6 — cola con prioridad. A diferencia de los de arriba, estos dos
+  // NO pasan por obtenerConfiguracionOperativa() ni por su cache de 60 s:
+  // los lee directo services/cola.ts en cada peticion, porque en la demo se
+  // ajustan en vivo y el cache tardaria hasta un minuto en reflejar el
+  // cambio. Las claves viven aca igual para no repetir el literal en otro
+  // archivo.
+  factorAgingMin: 'FACTOR_AGING_MIN',
+  limiteEsperaMax: 'LIMITE_ESPERA_MAX'
 } as const;
 
 export interface ConfiguracionOperativa {

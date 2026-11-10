@@ -7,7 +7,7 @@ import {
   TIPO_TOKEN_ACCESO,
   TIPO_TOKEN_TEMPORAL
 } from '../types/auth';
-import { Rol } from '../models/Usuario';
+import { Permiso } from '../models/Role';
 
 /**
  * Emision y verificacion de los dos tokens del sistema.
@@ -23,8 +23,9 @@ import { Rol } from '../models/Usuario';
  * Duracion del token de acceso: OCHO horas, no veinticuatro.
  *
  * Es la duracion definitiva que fija el Sprint 5. Un token no se puede
- * revocar: una vez firmado vale hasta que expira, aunque al usuario lo den
- * de baja o le cambien el rol. Veinticuatro horas significaba que una
+ * revocar por sí solo: una vez firmado vale hasta que expira. Sin embargo,
+ * checkPermission reconsulta la base y aplica de inmediato bajas y cambios
+ * de permisos. Veinticuatro horas significaba que una
  * sesion olvidada en una maquina compartida del deposito seguia siendo
  * valida al dia siguiente. Ocho horas es, mas o menos, un turno de trabajo.
  */
@@ -60,7 +61,8 @@ export const obtenerSecreto = (): string | null => {
 export interface DatosDeAcceso {
   id: string;
   correo: string;
-  rol: Rol;
+  roles: string[];
+  permisos: Permiso[];
 }
 
 /**
@@ -78,7 +80,8 @@ export const firmarTokenDeAcceso = (
     {
       id: usuario.id,
       correo: usuario.correo,
-      rol: usuario.rol,
+      roles: usuario.roles,
+      permisos: usuario.permisos,
       type: TIPO_TOKEN_ACCESO
     },
     secreto,

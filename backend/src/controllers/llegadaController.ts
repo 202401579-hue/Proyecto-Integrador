@@ -6,6 +6,7 @@ import { obtenerConfiguracionOperativa } from '../services/configuracionOperativ
 import { clasificarLlegada, limiteDeAusencia, minutosDeDiferencia } from '../services/puntualidad';
 import { marcarPedidosAusentes } from '../services/controlAusencias';
 import { registrarEvento } from '../services/eventos';
+import { prioridadBaseDe } from '../cola/prioridad';
 
 /**
  * POST /api/llegadas
@@ -89,6 +90,13 @@ export const registrarLlegada = async (req: Request, res: Response): Promise<voi
     // desde el que la promocion automatica lo va a tomar cuando se libere
     // un gateway compatible.
     pedido.estado = 'EN COLA';
+    // Sprint 6 — cola con prioridad. El pedido entra a la cola en este mismo
+    // instante (coincide con la llegada), sin espera todavia, y con la
+    // prioridad base de su puntualidad; reevaluarCola() es quien despues le
+    // suma puntos por el tiempo que pase esperando.
+    pedido.fechaHoraIngresoCola = llegada;
+    pedido.minutosEnEspera = 0;
+    pedido.prioridadCalculada = prioridadBaseDe(puntualidad);
     pedido.usuarioActualizacion = await nombreDelUsuario(req);
 
     await pedido.save();
@@ -108,6 +116,18 @@ export const registrarLlegada = async (req: Request, res: Response): Promise<voi
         // saber cuantos minutos tarde llego ese camion en realidad.
         minutosDeDiferencia: diferencia,
         inicioVentana: pedido.inicioVentana
+      }
+    });
+
+    // Evento aparte de LLEGADA_REGISTRADA (Sprint 6): ese describe el arribo
+    // del camion, este describe que ademas entro a la cola con una
+    // prioridad inicial. Mismo patron: no revierte nada si falla.
+    await registrarEvento(req, 'INGRESO_COLA', {
+      pedidoId: pedido._id,
+      detalles: {
+        numeroPedido: pedido.numeroPedido,
+        puntualidad,
+        prioridadCalculada: pedido.prioridadCalculada
       }
     });
 

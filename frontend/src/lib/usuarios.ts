@@ -1,4 +1,4 @@
-import { obtenerToken, type Rol } from "@/lib/session";
+import { obtenerToken } from "@/lib/session";
 
 /**
  * Administración de usuarios (Sprint 5).
@@ -9,8 +9,6 @@ import { obtenerToken, type Rol } from "@/lib/session";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
-export const ROLES: Rol[] = ["Administrador", "Coordinador", "Operador"];
-
 /**
  * Lo que devuelve GET /api/usuarios.
  *
@@ -18,11 +16,17 @@ export const ROLES: Rol[] = ["Administrador", "Coordinador", "Operador"];
  * tres campos tienen select: false en el modelo y, además, el backend los
  * borra al serializar. Nunca llegan al navegador, así que no se declaran.
  */
+export interface RolDeUsuario {
+  _id: string;
+  nombreRol: string;
+}
+
 export interface Usuario {
   _id: string;
   nombre: string;
   correo: string;
-  rol: Rol;
+  /** Desde el Sprint 7 un usuario tiene uno o varios roles (poblados por el backend). */
+  roles: RolDeUsuario[];
   activo: boolean;
   /** Un administrador le exige la verificación en dos pasos. */
   mfaObligatorio: boolean;
@@ -38,8 +42,8 @@ export interface Usuario {
  * Resultado de una llamada a la API.
  *
  * Se devuelve el mensaje del backend en lugar de uno propio: los 409 de este
- * módulo ("ya existe un usuario con ese correo", "no puede quitarse a sí
- * mismo el rol de Administrador") explican la regla que se chocó, y
+ * módulo ("ya existe un usuario con ese correo", "no puede modificar sus
+ * propios roles") explican la regla que se chocó, y
  * reemplazarlos por un "hubo un error" sería perder justo esa explicación.
  */
 export type ResultadoApi<T> =

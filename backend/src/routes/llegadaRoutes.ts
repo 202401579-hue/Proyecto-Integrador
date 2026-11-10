@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { controlarAusencias, registrarLlegada } from '../controllers/llegadaController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
@@ -13,7 +13,7 @@ router.use(verificarToken);
 // El arribo lo registra quien esta en el anden recibiendo el camion, que es
 // el Operador. El Coordinador tambien puede, porque es el dueno de la agenda
 // y necesita poder corregir la operacion del dia.
-router.post('/', autorizarRoles('Operador', 'Coordinador'), registrarLlegada);
+router.post('/', checkPermission('pedidos'), registrarLlegada);
 
 // POST /api/llegadas/control-ausencias
 //
@@ -21,7 +21,7 @@ router.post('/', autorizarRoles('Operador', 'Coordinador'), registrarLlegada);
 // de supervision, asi que queda para el Coordinador y el Administrador.
 router.post(
   '/control-ausencias',
-  autorizarRoles('Coordinador', 'Administrador'),
+  checkPermission('pedidos'),
   controlarAusencias
 );
 

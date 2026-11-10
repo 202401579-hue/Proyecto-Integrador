@@ -1,9 +1,10 @@
 import { Request } from 'express';
 import Descarga, { IDescarga } from '../models/Descarga';
 import Gateway, { IGateway } from '../models/Gateway';
-import Pedido, { ESTADOS_ELEGIBLES_DESCARGA, IPedido } from '../models/Pedido';
+import Pedido, { EstadoPedido, ESTADOS_ELEGIBLES_DESCARGA, IPedido } from '../models/Pedido';
 import { nombreDelUsuario } from './usuarioAuditoria';
 import { registrarEvento } from './eventos';
+import { verificarTurnoDelPedido } from './ordenCola';
 
 /**
  * Reglas de inicio de una descarga, en un solo lugar.
@@ -27,9 +28,17 @@ export const POPULATE_PEDIDO = { path: 'pedidoId', populate: { path: 'proveedorI
 export const MENSAJE_PEDIDO_NO_ENCONTRADO = 'El pedido indicado no existe o está inactivo';
 export const MENSAJE_GATEWAY_NO_ENCONTRADO = 'El gateway indicado no existe o está inactivo';
 
-export type ResultadoInicio =
-  | { tipo: 'iniciada'; descarga: IDescarga; gateway: IGateway; pedido: IPedido }
-  | { tipo: 'rechazado'; estado: number; mensaje: string };
+export type ResultadoInicio = ResultadoIniciado | ResultadoRechazado;
+
+export interface ResultadoRechazado {
+  tipo: 'rechazado';
+  estado: number;
+  mensaje: string;
+  /** Solo lo llena el rechazo por orden de turno (ver iniciarDescargaDePedido). */
+  pedidoSugerido?: { pedidoId: string; numeroPedido: string; prioridadCalculada: number };
+}
+
+export type ResultadoIniciado = { tipo: 'iniciada'; descarga: IDescarga; gateway: IGateway; pedido: IPedido };
 
 interface OpcionesInicio {
   /**
@@ -95,6 +104,30 @@ export const iniciarDescargaDePedido = async (
     };
   }
 
+  // Orden estricto de la cola (Sprint 6): un pedido EN COLA no puede
+  // saltarse al que le corresponde atenderse primero en este gateway. Los
+  // estados que ESTADOS_ELEGIBLES_DESCARGA acepta por compatibilidad con
+  // pedidos anteriores al Sprint 4 (ANTICIPADO, A TIEMPO, TARDÍO) no pasan
+  // por esta regla: conservan su comportamiento de siempre. Tampoco afecta
+  // a la promocion automatica, que llama a su propio flujo y nunca pasa por
+  // aca (ver promoverSiguienteDeLaCola).
+  if (pedido.estado === 'EN COLA') {
+    const { permitido, siguiente } = await verificarTurnoDelPedido(String(pedido._id), gateway);
+
+    if (!permitido && siguiente) {
+      return {
+        tipo: 'rechazado',
+        estado: 409,
+        mensaje: `Debe atenderse primero el pedido ${siguiente.numeroPedido} (prioridad ${siguiente.prioridadCalculada}, ${siguiente.minutosEnEspera} min en espera)`,
+        pedidoSugerido: {
+          pedidoId: siguiente._id,
+          numeroPedido: siguiente.numeroPedido,
+          prioridadCalculada: siguiente.prioridadCalculada
+        }
+      };
+    }
+  }
+
   // Ocupar el gateway con una sola actualizacion condicional: si otra
   // peticion lo ocupo primero, o ya no esta LIBRE, devuelve null. Asi dos
   // coordinadores que aprietan a la vez nunca ocupan la misma bahia.
@@ -132,11 +165,36 @@ export const iniciarDescargaDePedido = async (
     };
   }
 
+  return crearDescargaYRegistrarEventos(req, pedidoDescargando, gatewayOcupado, estadoAnteriorDelPedido, {
+    automatica: opciones.automatica === true
+  });
+};
+
+/**
+ * Ultimo tramo, comun a los dos caminos que inician una descarga: el pedido
+ * ya quedo en DESCARGANDO y el gateway ya quedo OCUPADO (sin importar en que
+ * orden se consiguieron los dos), falta crear el documento de Descarga y
+ * registrar los eventos.
+ *
+ * Si la creacion de la Descarga falla, revierte los dos a como estaban
+ * antes: el pedido a `estadoAnteriorDelPedido` y el gateway a LIBRE.
+ *
+ * Exportado: services/promocionCola.ts (promoverSiguienteDeLaCola) tambien
+ * lo usa, porque llega a este mismo punto por el otro orden (reclama el
+ * pedido primero y el gateway despues).
+ */
+export const crearDescargaYRegistrarEventos = async (
+  req: Request,
+  pedido: IPedido,
+  gatewayOcupado: IGateway,
+  estadoAnteriorDelPedido: EstadoPedido,
+  opciones: { automatica: boolean }
+): Promise<ResultadoIniciado> => {
   let descarga: IDescarga;
 
   try {
     descarga = await Descarga.create({
-      gatewayId: gateway._id,
+      gatewayId: gatewayOcupado._id,
       pedidoId: pedido._id,
       operadorId: req.usuario?.id,
       fechaHoraInicio: new Date(),
@@ -146,7 +204,7 @@ export const iniciarDescargaDePedido = async (
     // La descarga no se pudo crear: se revierten el pedido y el gateway a
     // como estaban antes de esta operacion.
     await Pedido.findByIdAndUpdate(pedido._id, { estado: estadoAnteriorDelPedido });
-    await Gateway.findByIdAndUpdate(gateway._id, { estado: 'LIBRE' });
+    await Gateway.findByIdAndUpdate(gatewayOcupado._id, { estado: 'LIBRE' });
     throw error;
   }
 
@@ -162,10 +220,10 @@ export const iniciarDescargaDePedido = async (
   // puede responder "que paso con el gateway 3" sin leer las descargas.
   const detallesComunes = {
     numeroGateway: gatewayOcupado.numeroGateway,
-    numeroPedido: pedidoDescargando.numeroPedido,
+    numeroPedido: pedido.numeroPedido,
     tipoCarga: gatewayOcupado.tipoCargaPermitida,
     // Deja constancia de si la inicio una persona o la promocion de la cola.
-    automatica: opciones.automatica === true
+    automatica: opciones.automatica
   };
 
   await registrarEvento(req, 'GATEWAY_ASIGNADO', {
@@ -182,43 +240,7 @@ export const iniciarDescargaDePedido = async (
     tipo: 'iniciada',
     descarga: descargaPoblada ?? descarga,
     gateway: gatewayOcupado,
-    pedido: pedidoDescargando
+    pedido
   };
 };
 
-/**
- * Promocion de la cola: busca al siguiente pedido que puede entrar en un
- * gateway que acaba de quedar libre y le inicia la descarga.
- *
- * Criterio de seleccion:
- * - activo y en un estado elegible (ver ESTADOS_ELEGIBLES_DESCARGA);
- * - con el tipo de producto que admite ESE gateway, porque RN-07/RN-08 no se
- *   relajan por ser automatico: el primero de la cola no entra si su carga no
- *   corresponde a la bahia, y se busca al primero que si corresponda;
- * - con llegada registrada, y entre esos, el que llego primero. El orden es
- *   por fechaHoraLlegadaReal y no por la hora de la cita: el que esta
- *   esperando en el patio desde hace mas tiempo es el que pasa.
- *
- * Devuelve null si no habia nadie esperando para esa bahia.
- */
-export const promoverPrimeroDeLaCola = async (
-  req: Request,
-  gateway: IGateway
-): Promise<ResultadoInicio | null> => {
-  const siguiente = await Pedido.findOne({
-    activo: true,
-    estado: { $in: ESTADOS_ELEGIBLES_DESCARGA },
-    tipoProducto: gateway.tipoCargaPermitida,
-    // Un pedido elegible sin llegada registrada no existe hoy, pero el
-    // filtro lo deja explicito: a la cola solo entra quien ya se presento.
-    fechaHoraLlegadaReal: { $ne: null }
-  }).sort({ fechaHoraLlegadaReal: 1 });
-
-  if (!siguiente) {
-    return null;
-  }
-
-  return iniciarDescargaDePedido(req, String(siguiente._id), String(gateway._id), {
-    automatica: true
-  });
-};

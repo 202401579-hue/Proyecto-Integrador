@@ -1,74 +1,73 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { conectarDB } from '../config/database';
+import Role, { PERMISOS_VALIDOS, Permiso } from '../models/Role';
 import Usuario from '../models/Usuario';
 
 dotenv.config();
 
-/**
- * Usuarios de prueba, uno por cada rol.
- *
- * El enunciado no pide endpoint de registro, asi que sin este script
- * no habria con que probar el login ni con que hacer la demostracion.
- *
- * Las contrasenas van en texto plano SOLO aca: el hook pre('save') del
- * modelo las hashea con bcrypt antes de que toquen la base de datos.
- *
- * Los tres quedan ACTIVOS y SIN MFA, con las mismas credenciales de
- * siempre. Es deliberado: si el seed dejara el segundo factor encendido,
- * ni el banco de pruebas funcionales ni la demo podrian iniciar sesion
- * sin un celular con la aplicacion autenticadora a mano. El MFA se activa
- * despues, desde la API, que es lo que el Sprint 5 tiene que demostrar.
- */
-const usuariosDePrueba = [
+/** Roles base definidos por Sprint 7. Se crean antes que los usuarios. */
+const rolesBase: Array<{ nombreRol: string; descripcion: string; permisos: Permiso[] }> = [
   {
-    nombre: 'Ana Administradora',
-    correo: 'admin@logistica.com',
-    password: 'Admin123',
-    rol: 'Administrador' as const
+    nombreRol: 'Administrador',
+    descripcion: 'Administración completa del sistema',
+    permisos: [...PERMISOS_VALIDOS]
   },
   {
-    nombre: 'Carlos Coordinador',
-    correo: 'coordinador@logistica.com',
-    password: 'Coord123',
-    rol: 'Coordinador' as const
+    nombreRol: 'Coordinador',
+    descripcion: 'Coordinación operativa y supervisión logística',
+    permisos: ['proveedores', 'pedidos', 'gateways', 'descargas', 'cola', 'kpis']
   },
   {
-    nombre: 'Oscar Operador',
-    correo: 'operador@logistica.com',
-    password: 'Oper123',
-    rol: 'Operador' as const
+    nombreRol: 'Operador',
+    descripcion: 'Operación de llegadas, bahías, descargas y cola',
+    permisos: ['pedidos', 'gateways', 'descargas', 'cola']
   }
-].map((usuario) => ({
-  ...usuario,
-  // Se escriben explicitamente en lugar de confiar en los default del
-  // esquema: asi el estado con el que arranca la demostracion se lee aca,
-  // y cambiar un default mas adelante no altera en silencio el seed.
-  activo: true,
-  mfaObligatorio: false,
-  twoFactorEnabled: false,
-  twoFactorRecoveryCodes: [],
-  usuarioCreacion: 'Sistema (seed inicial)'
-}));
+];
+
+const usuariosDePrueba = [
+  { nombre: 'Ana Administradora', correo: 'admin@logistica.com', password: 'Admin123', rolBase: 'Administrador' },
+  { nombre: 'Carlos Coordinador', correo: 'coordinador@logistica.com', password: 'Coord123', rolBase: 'Coordinador' },
+  { nombre: 'Oscar Operador', correo: 'operador@logistica.com', password: 'Oper123', rolBase: 'Operador' }
+];
 
 const sembrar = async (): Promise<void> => {
   await conectarDB();
 
-  // Borra los usuarios existentes para que el script se pueda correr
-  // las veces que haga falta sin chocar contra el indice unico del correo.
-  // Tambien limpia cualquier secreto de MFA que haya quedado de una demo
-  // anterior: los usuarios se recrean desde cero.
-  const borrados = await Usuario.deleteMany({});
-  console.log(`[Seed] Usuarios eliminados: ${borrados.deletedCount}`);
+  // Este script reinicia solo datos de demostración. No se ejecuta durante
+  // migraciones ni pruebas unitarias.
+  const usuariosBorrados = await Usuario.deleteMany({});
+  const rolesBorrados = await Role.deleteMany({});
+  console.log(`[Seed] Usuarios eliminados: ${usuariosBorrados.deletedCount}`);
+  console.log(`[Seed] Roles eliminados: ${rolesBorrados.deletedCount}`);
 
-  // Se usa create() y no insertMany(): insertMany se saltea el middleware
-  // pre('save') y guardaria las contrasenas en texto plano.
-  const creados = await Usuario.create(usuariosDePrueba);
+  const rolesCreados = await Role.create(rolesBase);
+  const rolesPorNombre = new Map(rolesCreados.map((rol) => [rol.nombreRol, rol]));
 
+  const creados = await Usuario.create(
+    usuariosDePrueba.map((usuario) => {
+      const rol = rolesPorNombre.get(usuario.rolBase);
+      if (!rol) throw new Error(`No se creó el rol base ${usuario.rolBase}`);
+
+      return {
+        nombre: usuario.nombre,
+        correo: usuario.correo,
+        password: usuario.password,
+        roles: [rol._id],
+        activo: true,
+        mfaObligatorio: false,
+        twoFactorEnabled: false,
+        twoFactorRecoveryCodes: [],
+        usuarioCreacion: 'Sistema (seed inicial)'
+      };
+    })
+  );
+
+  console.log(`[Seed] Roles creados: ${rolesCreados.length}`);
   console.log(`[Seed] Usuarios creados: ${creados.length}`);
-  creados.forEach((usuario) => {
+  creados.forEach((usuario, indice) => {
     console.log(
-      `  - ${usuario.rol.padEnd(14)} ${usuario.correo.padEnd(28)} ` +
+      `  - ${usuariosDePrueba[indice].rolBase.padEnd(14)} ${usuario.correo.padEnd(28)} ` +
         `activo: ${usuario.activo}  MFA obligatorio: ${usuario.mfaObligatorio}  ` +
         `MFA activo: ${usuario.twoFactorEnabled}`
     );

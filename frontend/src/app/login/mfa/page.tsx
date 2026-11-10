@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import CampoCodigo from "@/components/mfa/CampoCodigo";
-import { guardarToken, obtenerRutaPorRol, sesionDesdeToken } from "@/lib/session";
+import { guardarToken, sesionDesdeToken } from "@/lib/session";
+import { rutaInicial } from "@/lib/permisos";
 import { borrarTokenTemporal, obtenerTokenTemporal } from "@/lib/mfaTemp";
 import {
   esCodigoDeRecuperacion,
@@ -88,7 +89,7 @@ export default function PaginaVerificarMfa() {
 
     if (resultado.estado === "ok") {
       // Se lee el token antes de guardarlo: así se confirma que es legible y
-      // vigente, y de paso sale el rol para saber a qué sección mandar al
+      // vigente, y de paso salen los permisos para saber a qué sección mandar al
       // usuario. El punto 6 le agrega a sesionDesdeToken la exigencia de que
       // el token sea de tipo ACCESS, y esta comprobación la hereda.
       const sesion = sesionDesdeToken(resultado.datos.token);
@@ -100,7 +101,7 @@ export default function PaginaVerificarMfa() {
 
       guardarToken(resultado.datos.token);
       borrarTokenTemporal();
-      salirA(obtenerRutaPorRol(sesion.rol));
+      salirA(rutaInicial(sesion.permisos));
       return;
     }
 

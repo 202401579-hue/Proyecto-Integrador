@@ -1,15 +1,6 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { CamposAuditoria, camposAuditoria, opcionesAuditoria } from './auditoria';
-
-/**
- * Valores exactos de los roles, segun la tabla de acuerdos del equipo.
- * Van con mayuscula inicial: JavaScript distingue mayusculas al comparar
- * textos, asi que guardar "operador" romperia la redireccion del frontend.
- */
-export const ROLES = ['Administrador', 'Coordinador', 'Operador'] as const;
-
-export type Rol = (typeof ROLES)[number];
 
 /**
  * Cantidad de codigos de recuperacion que se entregan al activar el MFA.
@@ -22,7 +13,8 @@ export interface IUsuario extends Document, CamposAuditoria {
   nombre: string;
   correo: string;
   password: string;
-  rol: Rol;
+  /** Roles dinamicos asignados al usuario. Nunca se autorizan desde el JWT. */
+  roles: Types.ObjectId[];
   /**
    * El Administrador le exige MFA a este usuario. Es una decision de la
    * organizacion y por eso la toma el administrador, no el usuario.
@@ -81,12 +73,15 @@ const UsuarioSchema = new Schema<IUsuario>(
       // con .select('+password'). Asi el hash nunca viaja por accidente.
       select: false
     },
-    rol: {
-      type: String,
-      required: [true, 'El rol es obligatorio'],
-      enum: {
-        values: [...ROLES],
-        message: 'El rol debe ser Administrador, Coordinador u Operador'
+    roles: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Role' }],
+      required: [true, 'Debe asignarse al menos un rol'],
+      validate: {
+        validator: (roles: unknown): boolean => {
+          if (!Array.isArray(roles) || roles.length === 0) return false;
+          return new Set(roles.map((rol) => String(rol))).size === roles.length;
+        },
+        message: 'Debe asignarse al menos un rol sin repetirlo'
       }
     },
     mfaObligatorio: {

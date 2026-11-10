@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import Pedido, { EstadoPedido, IPedido, TipoProducto } from '../models/Pedido';
+import Pedido, { EstadoPedido, IPedido, Puntualidad, TipoProducto } from '../models/Pedido';
 import Proveedor, { IProveedor } from '../models/Proveedor';
 import Gateway, { EstadoGateway, IGateway, tipoCargaEsperado } from '../models/Gateway';
 import Descarga from '../models/Descarga';
@@ -15,6 +15,9 @@ import { PREFIJO_QA } from './entorno';
  */
 
 const MS_POR_MINUTO = 60 * 1000;
+
+/** Identifica roles y usuarios temporales creados por los escenarios RBAC V3. */
+export const PREFIJO_RBAC_QA = 'QA-RBAC-';
 
 let contador = 0;
 
@@ -51,6 +54,23 @@ export interface OpcionesPedido {
   /** Minutos desde ahora de la llegada real. Si se omite, no registró llegada. */
   llegadaEnMinutos?: number;
   proveedorId?: Types.ObjectId;
+  /**
+   * Puntualidad del arribo (Sprint 6). Solo tiene sentido junto con
+   * llegadaEnMinutos y estado: 'EN COLA': es lo que lee cola/prioridad.ts
+   * para calcular la prioridad base del pedido en la cola.
+   */
+  puntualidad?: Puntualidad;
+  /**
+   * Momento en que el pedido entró a la cola (Sprint 6). Si se omite y hay
+   * llegadaEnMinutos, se usa la misma fecha que fechaHoraLlegadaReal — igual
+   * que el flujo real (ver llegadaController.ts, donde las dos se escriben
+   * con la misma hora del servidor).
+   */
+  fechaHoraIngresoCola?: Date;
+  /** Minutos de espera ya acumulados (Sprint 6). Un pedido recién ingresado empieza en 0. */
+  minutosEnEspera?: number;
+  /** Prioridad calculada (Sprint 6). El flujo real la inicializa en prioridadBaseDe(puntualidad). */
+  prioridadCalculada?: number;
 }
 
 /**
@@ -68,11 +88,16 @@ export const crearPedidoDePrueba = async (opciones: OpcionesPedido): Promise<IPe
     duracionMinutos = 60,
     estado = 'PROGRAMADO',
     llegadaEnMinutos,
-    proveedorId
+    proveedorId,
+    puntualidad,
+    minutosEnEspera,
+    prioridadCalculada
   } = opciones;
 
   const proveedor = proveedorId ?? (await crearProveedorDePrueba(tipoProducto))._id;
   const inicio = enMinutos(inicioEnMinutos);
+  const fechaHoraLlegadaReal =
+    llegadaEnMinutos === undefined ? undefined : enMinutos(llegadaEnMinutos);
 
   return Pedido.create({
     numeroPedido: numeroDePrueba(),
@@ -83,8 +108,13 @@ export const crearPedidoDePrueba = async (opciones: OpcionesPedido): Promise<IPe
     inicioVentana: inicio,
     finVentana: new Date(inicio.getTime() + duracionMinutos * MS_POR_MINUTO),
     estado,
-    fechaHoraLlegadaReal:
-      llegadaEnMinutos === undefined ? undefined : enMinutos(llegadaEnMinutos),
+    fechaHoraLlegadaReal,
+    puntualidad,
+    // Igual que el flujo real (llegadaController.ts): al entrar a la cola el
+    // ingreso coincide con la llegada, salvo que el caso pida otra fecha.
+    fechaHoraIngresoCola: opciones.fechaHoraIngresoCola ?? fechaHoraLlegadaReal,
+    minutosEnEspera,
+    prioridadCalculada,
     usuarioCreacion: 'Banco de pruebas QA'
   });
 };

@@ -3,41 +3,44 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { cerrarSesion, Rol } from "@/lib/session";
+import { cerrarSesion } from "@/lib/session";
+import { tienePermisos, type Permiso } from "@/lib/permisos";
 
 interface EnlaceSidebar {
   href: string;
   label: string;
   icono: string;
+  /** Permisos que hacen falta (todos) para ver el enlace. */
+  permisos: Permiso[];
 }
 
-const ENLACES_POR_ROL: Record<Rol, EnlaceSidebar[]> = {
-  Administrador: [
-    { href: "/administrador", label: "Inicio", icono: "bi-house" },
-    { href: "/administrador/usuarios", label: "Usuarios", icono: "bi-people" },
-    { href: "/administrador/parametros", label: "Parámetros", icono: "bi-sliders" },
-    { href: "/administrador/gateways", label: "Gateways", icono: "bi-hdd-rack" },
-    { href: "/administrador/indicadores", label: "Indicadores", icono: "bi-graph-up" },
-    { href: "/administrador/bitacora", label: "Bitácora", icono: "bi-journal-text" },
-  ],
-  Coordinador: [
-    { href: "/coordinador", label: "Tablero", icono: "bi-grid-3x3-gap" },
-    { href: "/coordinador/proveedores", label: "Proveedores", icono: "bi-building" },
-    { href: "/coordinador/pedidos", label: "Pedidos", icono: "bi-calendar-check" },
-    { href: "/coordinador/indicadores", label: "Indicadores", icono: "bi-graph-up" },
-    { href: "/coordinador/bitacora", label: "Bitácora", icono: "bi-journal-text" },
-  ],
-  Operador: [
-    { href: "/operador", label: "Inicio", icono: "bi-house" },
-    { href: "/operador/llegadas", label: "Llegadas", icono: "bi-truck" },
-  ],
-};
+// Una sola lista para todos: cada enlace declara el permiso que necesita y
+// solo se muestran los que el usuario tiene. Las rutas y los permisos son los
+// mismos de lib/permisosRutas.ts.
+//
+// "Gateways" (mantenimiento) pide además `roles` para que no se duplique con
+// el "Tablero" en quienes no administran: el Coordinador y el Operador ven el
+// tablero de descargas, el Administrador ve las dos pantallas.
+const ENLACES: EnlaceSidebar[] = [
+  { href: "/administrador", label: "Inicio", icono: "bi-house", permisos: ["roles"] },
+  { href: "/admin/roles", label: "Roles", icono: "bi-shield-lock", permisos: ["roles"] },
+  { href: "/usuarios/gestion", label: "Usuarios", icono: "bi-people", permisos: ["usuarios"] },
+  { href: "/administrador/parametros", label: "Parámetros", icono: "bi-sliders", permisos: ["roles"] },
+  { href: "/administrador/gateways", label: "Gateways", icono: "bi-hdd-rack", permisos: ["gateways", "roles"] },
+  { href: "/coordinador", label: "Tablero", icono: "bi-grid-3x3-gap", permisos: ["gateways"] },
+  { href: "/operador/llegadas", label: "Llegadas", icono: "bi-truck", permisos: ["pedidos"] },
+  { href: "/cola", label: "Cola de espera", icono: "bi-hourglass-split", permisos: ["cola"] },
+  { href: "/coordinador/proveedores", label: "Proveedores", icono: "bi-building", permisos: ["proveedores"] },
+  { href: "/coordinador/pedidos", label: "Pedidos", icono: "bi-calendar-check", permisos: ["pedidos"] },
+  { href: "/administrador/indicadores", label: "Indicadores", icono: "bi-graph-up", permisos: ["kpis"] },
+  { href: "/administrador/bitacora", label: "Bitácora", icono: "bi-journal-text", permisos: ["kpis"] },
+];
 
 interface SidebarProps {
-  rol: Rol;
+  permisos: Permiso[];
 }
 
-export default function Sidebar({ rol }: SidebarProps) {
+export default function Sidebar({ permisos }: SidebarProps) {
   // Arranca colapsado en pantallas angostas. Se calcula al crear el estado:
   // el layout privado solo renderiza el sidebar en el navegador, así que
   // window ya existe.
@@ -53,8 +56,7 @@ export default function Sidebar({ rol }: SidebarProps) {
     router.replace("/login");
   }
 
-  const enlaces = ENLACES_POR_ROL[rol] ?? [];
-  const rutaInicio = enlaces[0]?.href;
+  const enlaces = ENLACES.filter((enlace) => tienePermisos(permisos, enlace.permisos));
 
   return (
     <aside
@@ -84,8 +86,10 @@ export default function Sidebar({ rol }: SidebarProps) {
       <nav className="flex-grow-1 mt-2">
         <ul className="nav flex-column">
           {enlaces.map((enlace) => {
-            const esInicio = enlace.href === rutaInicio;
-            const activo = esInicio
+            // Un enlace cuya ruta es prefijo de otro (por ejemplo /administrador
+            // y /coordinador) solo se marca cuando la ruta es exactamente esa.
+            const esPrefijoDeOtro = ENLACES.some((otro) => otro.href.startsWith(`${enlace.href}/`));
+            const activo = esPrefijoDeOtro
               ? pathname === enlace.href
               : pathname === enlace.href || pathname.startsWith(`${enlace.href}/`);
             return (

@@ -1,6 +1,5 @@
 import { borrarTokenTemporal } from "@/lib/mfaTemp";
-
-export type Rol = "Administrador" | "Coordinador" | "Operador";
+import { esPermiso, type Permiso } from "@/lib/permisos";
 
 /**
  * Único tipo de token que abre sesión. El backend firma dos con el mismo
@@ -13,7 +12,10 @@ export const TIPO_TOKEN_ACCESO = "ACCESS";
 export interface TokenPayload {
   id: string;
   correo: string;
-  rol: Rol;
+  /** Nombres de los roles del usuario (informativo: se muestra en la barra). */
+  roles: string[];
+  /** Permisos efectivos al iniciar sesión: de ahí salen menú y guard. */
+  permisos: Permiso[];
   type: typeof TIPO_TOKEN_ACCESO;
   iat: number;
   exp: number;
@@ -21,25 +23,20 @@ export interface TokenPayload {
 
 /**
  * Lo que sale de decodificar cualquier JWT, antes de saber qué es. Puede ser
- * un token de acceso, un MFA_TEMP (que no lleva rol) o uno emitido antes del
- * Sprint 5 (que no lleva type).
+ * un token de acceso, un MFA_TEMP (que no lleva permisos) o uno viejo (sin
+ * type, o con `rol` y sin permisos).
  */
 interface PayloadCrudo {
   id?: unknown;
   correo?: unknown;
-  rol?: unknown;
+  roles?: unknown;
+  permisos?: unknown;
   type?: unknown;
   iat?: unknown;
   exp?: unknown;
 }
 
 const CLAVE_TOKEN = "token";
-
-const RUTA_POR_ROL: Record<Rol, string> = {
-  Administrador: "/administrador",
-  Coordinador: "/coordinador",
-  Operador: "/operador",
-};
 
 export function obtenerToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -93,11 +90,6 @@ export function estaExpirado(payload: { exp: number }): boolean {
   return Date.now() >= payload.exp * 1000;
 }
 
-/** true si el valor es uno de los tres roles que conoce el sistema. */
-function esRol(valor: unknown): valor is Rol {
-  return typeof valor === "string" && valor in RUTA_POR_ROL;
-}
-
 /**
  * Convierte un token en sesión, o devuelve null.
  *
@@ -113,9 +105,11 @@ function esRol(valor: unknown): valor is Rol {
  * costo de negar por omisión es un único reinicio de sesión para quien tenga
  * uno viejo guardado.
  *
- * Se exige además que el rol sea uno de los tres conocidos: de ahí sale la
- * ruta de la sección, y un rol que no esté en el mapa dejaría al usuario
- * dando vueltas entre redirecciones.
+ * Desde el Sprint 7 se exige además que el token traiga `permisos` (un
+ * arreglo). Un token anterior, que solo tenía `rol`, cuenta como sin sesión:
+ * hay que volver a iniciar sesión una vez. Por la misma razón el menú de
+ * quien ya tenía sesión no cambia hasta que vuelve a entrar: los permisos
+ * viajan dentro del token.
  */
 export function sesionDesdeToken(token: string | null): TokenPayload | null {
   if (!token) return null;
@@ -124,7 +118,7 @@ export function sesionDesdeToken(token: string | null): TokenPayload | null {
   if (!payload) return null;
 
   if (payload.type !== TIPO_TOKEN_ACCESO) return null;
-  if (!esRol(payload.rol)) return null;
+  if (!Array.isArray(payload.permisos)) return null;
   if (typeof payload.exp !== "number" || estaExpirado({ exp: payload.exp })) return null;
 
   // Se arma el objeto en lugar de forzar el tipo: así lo que devuelve esta
@@ -132,7 +126,10 @@ export function sesionDesdeToken(token: string | null): TokenPayload | null {
   return {
     id: String(payload.id ?? ""),
     correo: String(payload.correo ?? ""),
-    rol: payload.rol,
+    roles: Array.isArray(payload.roles)
+      ? payload.roles.filter((r): r is string => typeof r === "string")
+      : [],
+    permisos: payload.permisos.filter(esPermiso),
     type: TIPO_TOKEN_ACCESO,
     iat: typeof payload.iat === "number" ? payload.iat : 0,
     exp: payload.exp,
@@ -141,8 +138,4 @@ export function sesionDesdeToken(token: string | null): TokenPayload | null {
 
 export function obtenerSesion(): TokenPayload | null {
   return sesionDesdeToken(obtenerToken());
-}
-
-export function obtenerRutaPorRol(rol: Rol): string {
-  return RUTA_POR_ROL[rol] ?? "/login";
 }
