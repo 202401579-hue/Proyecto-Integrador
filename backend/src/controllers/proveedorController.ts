@@ -36,7 +36,7 @@ export const crearProveedor = async (req: Request, res: Response): Promise<void>
       telefono,
       emailContacto,
       // Auditoria: quien dio el alta. El nombre sale de la base, no del
-      // token, porque el token solo trae id, correo y rol.
+      // token, porque el token solo trae id, correo, roles y permisos.
       usuarioCreacion: await nombreDelUsuario(req)
     });
 

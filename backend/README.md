@@ -1168,8 +1168,8 @@ más la cantidad de pedidos que subieron:
 }
 ```
 
-> En el Sprint 7, `autorizarRoles('Administrador', 'Coordinador', 'Operador')`
-> en estas dos rutas pasa a `checkPermission('cola')`.
+> En Sprint 7, estas rutas usan `checkPermission('cola')`; el permiso se
+> resuelve contra los roles activos de la base de datos en cada petición.
 
 ### Los tres eventos nuevos
 
@@ -1323,7 +1323,7 @@ backend/
 │   │   └── gatewayController.ts      → CRUD de las bahías, con sus reglas de estado
 │   ├── middlewares/
 │   │   ├── verificarToken.ts         → valida la firma del JWT (401)
-│   │   └── autorizarRoles.ts         → compara el rol del token (403)
+│   │   └── checkPermission.ts        → consulta permisos dinámicos en MongoDB (403)
 │   ├── models/
 │   │   ├── auditoria.ts              → los 5 campos de auditoría, compartidos
 │   │   ├── Usuario.ts                → esquema + hash bcrypt + comparación
@@ -1379,3 +1379,71 @@ backend/
 - **En Windows, cortar `npm run dev` no siempre mata a `ts-node-dev`:** el
   servidor viejo sigue ocupando el puerto y las pruebas terminan pegándole a
   otra base. Si algo no cuadra, revisar en el log a qué base se conectó.
+
+---
+
+## Sprint 7 — Roles dinámicos
+
+`Usuario` ya no almacena un rol textual. Su campo `roles` es un arreglo no
+vacío de referencias a `Role`; las respuestas de usuarios lo devuelven
+poblado como `{ _id, nombreRol }`. Solo se pueden asignar roles existentes y
+activos. Un usuario no puede modificar sus propios roles ni darse de baja.
+
+### Modelo y API
+
+`Role` usa la colección `roles` y contiene `nombreRol`, `descripcion`,
+`permisos`, `activo` y los campos de auditoría. El nombre es único entre roles
+activos, sin distinguir mayúsculas. El rol **Administrador** no puede
+renombrarse, desactivarse ni perder los permisos `usuarios` y `roles`.
+
+| Método | Ruta | Permiso |
+|---|---|---|
+| GET | `/api/roles?activo=true|false` | `roles` **o** `usuarios` |
+| POST | `/api/roles` | `roles` |
+| PUT | `/api/roles/:id` | `roles` |
+| DELETE | `/api/roles/:id` | `roles` |
+
+`DELETE` realiza baja lógica y devuelve `409` (con hasta cinco usuarios) si
+el rol sigue asignado a un usuario activo. Las altas y cambios de roles de
+usuarios registran `ROL_ASIGNADO_USUARIO`; la API de roles registra
+`ROL_CREADO`, `ROL_MODIFICADO` y `ROL_DESACTIVADO`.
+
+### Tokens y autorización
+
+El ACCESS token dura ocho horas y contiene `id`, `correo`, `roles`,
+`permisos` y `type: "ACCESS"`. Sus roles y permisos permiten al frontend
+adaptar la interfaz, pero **no autorizan al backend**. `checkPermission` carga
+en cada petición protegida el usuario activo y sus roles activos desde MongoDB;
+un cambio de permisos tiene efecto inmediato incluso usando el mismo token.
+Los JWT antiguos sin `permisos` se rechazan con `401`. El token `MFA_TEMP`
+conserva su formato y su duración de cinco minutos.
+
+Los únicos permisos válidos son: `usuarios`, `roles`, `proveedores`,
+`pedidos`, `gateways`, `descargas`, `cola` y `kpis`.
+
+| Recurso | Permiso |
+|---|---|
+| `/api/usuarios`, `/api/auth/solo-admin` | `usuarios` |
+| GET `/api/roles` | `roles` o `usuarios` |
+| Resto de `/api/roles` y `/api/parametros` | `roles` |
+| `/api/proveedores` | `proveedores` |
+| `/api/pedidos`, `/api/llegadas` | `pedidos` |
+| `/api/gateways` | `gateways` |
+| `/api/descargas/iniciar`, `/finalizar`, GET `/activas` | `descargas` |
+| `/api/cola` | `cola` |
+| `/api/kpis`, GET `/api/eventos` | `kpis` |
+
+Los roles base son Administrador (los ocho permisos), Coordinador
+(`proveedores`, `pedidos`, `gateways`, `descargas`, `cola`, `kpis`) y Operador
+(`pedidos`, `gateways`, `descargas`, `cola`). Por la regla explícita de la
+guía, Coordinador ya no lee `/api/parametros`: no se le otorga el permiso
+administrativo `roles` para conservar ese acceso.
+
+### Migración y seeds
+
+`npm run migrar:roles` crea o actualiza los tres roles base y asigna el rol
+equivalente a usuarios heredados con `rol` textual **solo si aún no tienen
+`roles`**. Es idempotente, no elimina usuarios ni borra el campo legacy. No
+ejecutar la migración ni los seeds contra una base no autorizada. `npm run
+seed` reinicia los datos de demostración, crea primero los roles y después sus
+usuarios.

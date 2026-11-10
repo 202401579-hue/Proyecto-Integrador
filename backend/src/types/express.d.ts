@@ -7,10 +7,8 @@ import { PayloadAcceso, PayloadTemporal } from './auth';
  *
  * Son dos campos distintos y no uno solo a proposito. `usuario` solo lo
  * escribe verificarToken, y solo con un token de acceso ya comprobado: por
- * eso su tipo incluye el rol y autorizarRoles puede leerlo sin preguntar
- * nada. Si los dos tokens compartieran un mismo campo, el rol seria
- * opcional en todas partes y la comprobacion quedaria a criterio de quien
- * escriba el proximo controlador.
+ * eso su tipo incluye roles y permisos informativos. La autorizacion no los
+ * usa: checkPermission recarga los roles activos desde MongoDB.
  */
 declare global {
   namespace Express {

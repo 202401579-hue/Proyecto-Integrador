@@ -8,13 +8,12 @@ import {
   reprogramarPedido
 } from '../controllers/pedidoController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
-// La programacion de pedidos es del rol Coordinador: todas las rutas
-// piden token valido (401) y ese rol (403).
-router.use(verificarToken, autorizarRoles('Coordinador'));
+// Todas las rutas requieren token válido (401) y permiso pedidos (403).
+router.use(verificarToken, checkPermission('pedidos'));
 
 // POST /api/pedidos  (el prefijo /api/pedidos se monta en server.ts)
 router.post('/', crearPedido);

@@ -14,6 +14,7 @@ import descargaRoutes from './routes/descargaRoutes';
 import eventoRoutes from './routes/eventoRoutes';
 import kpiRoutes from './routes/kpiRoutes';
 import colaRoutes from './routes/colaRoutes';
+import rolRoutes from './routes/rolRoutes';
 
 // Carga las variables de entorno antes que cualquier otra cosa,
 // porque la conexion a Mongo y la firma del JWT dependen de ellas.
@@ -40,6 +41,9 @@ app.use('/api/mfa', mfaRoutes);
 // Administracion de usuarios (Sprint 5): alta, baja, roles y exigencia
 // del segundo factor. Solo para el rol Administrador.
 app.use('/api/usuarios', usuarioRoutes);
+
+// Administración dinámica de roles y sus permisos (Sprint 7).
+app.use('/api/roles', rolRoutes);
 
 // Rutas del modulo de proveedores (rol Coordinador)
 app.use('/api/proveedores', proveedorRoutes);

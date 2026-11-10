@@ -6,6 +6,7 @@ import Pedido, { IPedido, Puntualidad } from '../models/Pedido';
 import Descarga from '../models/Descarga';
 import Gateway from '../models/Gateway';
 import Evento from '../models/Evento';
+import Role from '../models/Role';
 import Usuario from '../models/Usuario';
 import { HorarioOperativo, calcularVentana, esDiaHabil } from '../services/ventanaHoraria';
 import { obtenerConfiguracionOperativa } from '../services/configuracionOperativa';
@@ -165,6 +166,17 @@ const horaCorta = (fecha: Date): string =>
 
 const sembrar = async (): Promise<void> => {
   await conectarDB();
+
+  // Los usuarios del seed inicial ahora referencian estos documentos. Se
+  // comprueba antes de tocar datos de demostración para no dejar una demo
+  // incompleta si se ejecutó seedDemo sin haber preparado Sprint 7.
+  const rolesBase = await Role.countDocuments({
+    nombreRol: { $in: ['Administrador', 'Coordinador', 'Operador'] },
+    activo: true
+  });
+  if (rolesBase !== 3) {
+    throw new Error('Faltan roles base activos. Corré "npm run seed" antes de "npm run seed:demo".');
+  }
 
   // El horario operativo, las tolerancias y el prefijo del numero de pedido
   // viven en la coleccion parametros (npm run seed:parametros). Si faltan,

@@ -18,6 +18,7 @@ import {
   verificarCodigoTotp
 } from '../services/mfa';
 import { firmarTokenDeAcceso, obtenerSecreto } from '../services/tokens';
+import { datosDeAccesoDeRoles } from '../services/roles';
 
 /**
  * Configuracion y verificacion del segundo factor.
@@ -320,11 +321,17 @@ export const verificarLoginConMfa = async (req: Request, res: Response): Promise
 
     olvidarIntentos(temporal.jti);
 
+    const datosDeAcceso = await datosDeAccesoDeRoles(usuario.roles);
+    if (datosDeAcceso.roles.length === 0) {
+      res.status(403).json({ mensaje: 'La cuenta no tiene roles activos asignados.' });
+      return;
+    }
+
     const token = firmarTokenDeAcceso(
       {
         id: String(usuario._id),
         correo: usuario.correo,
-        rol: usuario.rol
+        ...datosDeAcceso
       },
       secreto
     );

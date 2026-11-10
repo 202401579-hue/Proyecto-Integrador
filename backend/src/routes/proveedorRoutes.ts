@@ -6,13 +6,12 @@ import {
   listarProveedores
 } from '../controllers/proveedorController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
-// El modulo de proveedores es del rol Coordinador: todas las rutas
-// piden token valido (401) y ese rol (403).
-router.use(verificarToken, autorizarRoles('Coordinador'));
+// El módulo requiere token válido (401) y permiso proveedores (403).
+router.use(verificarToken, checkPermission('proveedores'));
 
 // POST /api/proveedores  (el prefijo /api/proveedores se monta en server.ts)
 router.post('/', crearProveedor);

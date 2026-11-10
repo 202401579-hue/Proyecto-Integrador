@@ -7,7 +7,7 @@ import {
   obtenerGateway
 } from '../controllers/gatewayController';
 import { verificarToken } from '../middlewares/verificarToken';
-import { autorizarRoles } from '../middlewares/autorizarRoles';
+import { checkPermission } from '../middlewares/checkPermission';
 
 const router = Router();
 
@@ -18,15 +18,15 @@ router.use(verificarToken);
 // tipo de carga o darlas de baja es del Administrador. El Coordinador las
 // lee porque necesita saber que bahias hay y cuales estan disponibles para
 // asignar una descarga.
-router.get('/', autorizarRoles('Administrador', 'Coordinador'), listarGateways);
+router.get('/', checkPermission('gateways'), listarGateways);
 
-router.get('/:id', autorizarRoles('Administrador', 'Coordinador'), obtenerGateway);
+router.get('/:id', checkPermission('gateways'), obtenerGateway);
 
-router.post('/', autorizarRoles('Administrador'), crearGateway);
+router.post('/', checkPermission('gateways'), crearGateway);
 
-router.put('/:id', autorizarRoles('Administrador'), actualizarGateway);
+router.put('/:id', checkPermission('gateways'), actualizarGateway);
 
 // DELETE es borrado logico: pasa activo a false, no borra el documento.
-router.delete('/:id', autorizarRoles('Administrador'), inactivarGateway);
+router.delete('/:id', checkPermission('gateways'), inactivarGateway);
 
 export default router;

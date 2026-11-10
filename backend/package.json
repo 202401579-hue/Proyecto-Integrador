@@ -14,7 +14,8 @@
     "seed:parametros": "ts-node-dev --transpile-only src/scripts/seedParametros.ts",
     "seed:parametros-cola": "ts-node-dev --transpile-only src/scripts/seedParametrosCola.ts",
     "seed:gateways": "ts-node-dev --transpile-only src/scripts/seedGateways.ts",
-    "seed:demo": "ts-node-dev --transpile-only src/scripts/seedDemo.ts"
+    "seed:demo": "ts-node-dev --transpile-only src/scripts/seedDemo.ts",
+    "migrar:roles": "ts-node-dev --transpile-only src/scripts/migrarRoles.ts"
   },
   "author": "",
   "license": "ISC",
