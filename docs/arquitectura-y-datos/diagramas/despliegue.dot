@@ -1,0 +1,31 @@
+digraph G {
+  graph [rankdir=TB, fontname="Helvetica", nodesep=0.9, ranksep=1.0, dpi=220, pad=0.2, newrank=true];
+  node  [fontname="Helvetica", fontsize=10.5, shape=box3d, style="filled", fillcolor="#F4F7FB", color="#44536a", margin="0.2,0.14", width=3.0];
+  edge  [fontname="Helvetica", fontsize=10, color="#44536a", penwidth=1.6];
+
+  garita [fillcolor="#E8F1FB", label=<<b>«device»<br/>Puesto de Garita / Estación de trabajo</b><br/><br/>
+    <font point-size="10">Operador (garita) · Coordinador · Administrador<br/>
+    <i>«execution environment» Navegador web</i><br/>
+    «artifact» aplicación React 19 (JavaScript descargado)</font>>];
+
+  web [fillcolor="#FFF6E5", label=<<b>«device»<br/>Servidor Web</b><br/><br/>
+    <font point-size="10"><i>«execution environment» Node.js</i><br/>
+    «artifact» frontend (Next.js 16)<br/>
+    Puerto 3000</font>>];
+
+  api [fillcolor="#EAF6EE", label=<<b>«device»<br/>Servidor API</b><br/><br/>
+    <font point-size="10"><i>«execution environment» Node.js</i><br/>
+    «artifact» backend (Express 5 + TypeScript)<br/>
+    JWT · RBAC · motor de cola<br/>
+    Puerto 4000</font>>];
+
+  bd [fillcolor="#F1EAF8", label=<<b>«device»<br/>Servidor de Base de Datos</b><br/><br/>
+    <font point-size="10"><i>«execution environment» mongod</i><br/>
+    «artifact» logistica_db (8 colecciones)<br/>
+    Puerto 27017</font>>];
+
+  {rank=same; web; api;}
+  garita -> web [label="  HTTP sobre TCP/IP\n  carga de páginas y recursos"];
+  garita -> api [label="  HTTP/REST + JSON sobre TCP/IP\n  sondeo (polling): cola cada 5 s,\n  tablero cada 15 s"];
+  api -> bd   [label="  Protocolo MongoDB sobre TCP/IP\n  (Mongoose)"];
+}

@@ -1,0 +1,43 @@
+digraph G {
+  graph [rankdir=TB, fontname="Helvetica", nodesep=0.3, ranksep=0.5, dpi=220, pad=0.2, compound=true, newrank=true];
+  node  [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#FFFFFF", color="#5b6b7d", margin="0.14,0.08", width=2.6];
+  edge  [fontname="Helvetica", fontsize=10, color="#44536a", penwidth=1.4];
+
+  subgraph cluster_c1 {
+    label=<<b>CAPA 1 · PRESENTACIÓN</b>  <font point-size="10">Next.js 16 · React 19 · Bootstrap 5 — navegador del usuario</font>>;
+    style="rounded,filled"; fillcolor="#E8F1FB"; color="#2F6DB5"; fontsize=12; labeljust=l;
+    p1 [label="Páginas (app/)\nlogin · operador · coordinador\nadministrador · cola"];
+    p2 [label="Componentes\nGatewaysTablero · TableroCola\nBitacoraEventos · KpisDashboard"];
+    p3 [label="Hooks y lib\nuseColaRefresco (sondeo 5 s)\nsession · cola · mfa"];
+    {rank=same; p1; p2; p3;}
+  }
+  subgraph cluster_c2 {
+    label=<<b>CAPA 2 · API / APLICACIÓN</b>  <font point-size="10">Express 5 · TypeScript — puerto 4000</font>>;
+    style="rounded,filled"; fillcolor="#EAF6EE"; color="#2b7a50"; fontsize=12; labeljust=l;
+    a1 [label="Routes (13)\n/api/auth · /api/pedidos\n/api/cola · /api/roles …"];
+    a2 [label="Middlewares\nCORS · express.json\nverificarToken · checkPermission"];
+    a3 [label="Controllers (13)\nvalidan la entrada y\nresponden HTTP"];
+    {rank=same; a1; a2; a3;}
+  }
+  subgraph cluster_c3 {
+    label=<<b>CAPA 3 · LÓGICA DE NEGOCIO</b>  <font point-size="10">Servicios y motor de cola, sin dependencia de Express</font>>;
+    style="rounded,filled"; fillcolor="#FFF6E5"; color="#b7791f"; fontsize=12; labeljust=l;
+    s1 [label="services/\npuntualidad (RN-04) · descargas\nventanaHoraria · numeroPedido\ncontrolAusencias · eventos"];
+    s2 [label="cola/ (Sprint 6)\nprioridad · heapBinario\nconstruirCola · cambiosAging"];
+    s3 [label="Seguridad\nlogin · mfa (TOTP)\ntokens JWT · permisos"];
+    {rank=same; s1; s2; s3;}
+  }
+  subgraph cluster_c4 {
+    label=<<b>CAPA 4 · PERSISTENCIA</b>  <font point-size="10">Mongoose 9 + MongoDB (logistica_db)</font>>;
+    style="rounded,filled"; fillcolor="#F1EAF8"; color="#6b46a0"; fontsize=12; labeljust=l;
+    d1 [label="models/ (8)\nProveedor · Pedido · Gateway · Descarga\nEvento · Parametro · Usuario · Role", width=4.2];
+    d2 [shape=cylinder, style="filled", fillcolor="#FFFFFF", label="MongoDB\n8 colecciones", width=1.6];
+    {rank=same; d1; d2;}
+  }
+
+  p1 -> p2 -> p3 [style=invis]; a1 -> a2 -> a3 [style=invis]; s1 -> s2 -> s3 [style=invis];
+  p2 -> a2 [label="  HTTP/REST + JSON · Authorization: Bearer (JWT)", lhead=cluster_c2, ltail=cluster_c1];
+  a2 -> s2 [label="  invoca servicios", lhead=cluster_c3, ltail=cluster_c2];
+  s2 -> d1 [label="  lee / escribe documentos", lhead=cluster_c4, ltail=cluster_c3];
+  d1 -> d2 [label="  TCP/IP · 27017", constraint=false];
+}

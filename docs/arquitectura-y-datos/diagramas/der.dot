@@ -1,0 +1,94 @@
+digraph G {
+  graph [rankdir=TB, fontname="Helvetica", nodesep=0.35, ranksep=0.7, dpi=220, pad=0.2, splines=true];
+  node  [fontname="Helvetica", fontsize=13, shape=plain];
+  edge  [fontname="Helvetica", fontsize=11, color="#44536a", penwidth=1.3, dir=both, arrowtail=teetee, arrowhead=crowodot];
+
+  proveedores [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#6b46a0">
+    <tr><td bgcolor="#6b46a0"><font color="white"><b>proveedores</b></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left">razonSocial : string</td></tr>
+    <tr><td align="left">identificacionTributaria : string <i>UQ</i></td></tr>
+    <tr><td align="left">categoria : enum</td></tr></table>>];
+
+  pedidos [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#2F6DB5">
+    <tr><td bgcolor="#2F6DB5"><font color="white"><b>pedidos</b></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left">numeroPedido : string <i>UQ</i></td></tr>
+    <tr><td align="left"><b>FK</b> proveedorId : ObjectId</td></tr>
+    <tr><td align="left">tipoProducto · estado</td></tr>
+    <tr><td align="left">puntualidad</td></tr>
+    <tr><td align="left">fechaHoraProgramada</td></tr>
+    <tr><td align="left">inicioVentana · finVentana</td></tr>
+    <tr><td align="left">fechaHoraLlegadaReal</td></tr>
+    <tr><td align="left">fechaHoraIngresoCola</td></tr>
+    <tr><td align="left">minutosEnEspera</td></tr>
+    <tr><td align="left">prioridadCalculada</td></tr></table>>];
+
+  gateways [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#2b7a50">
+    <tr><td bgcolor="#2b7a50"><font color="white"><b>gateways</b></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left">numeroGateway : int (1-5) <i>UQ</i></td></tr>
+    <tr><td align="left">tipoCargaPermitida : enum</td></tr>
+    <tr><td align="left">estado : enum</td></tr></table>>];
+
+  descargas [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#b7791f">
+    <tr><td bgcolor="#b7791f"><font color="white"><b>descargas</b></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left"><b>FK</b> gatewayId : ObjectId</td></tr>
+    <tr><td align="left"><b>FK</b> pedidoId : ObjectId</td></tr>
+    <tr><td align="left"><b>FK</b> operadorId : ObjectId</td></tr>
+    <tr><td align="left">fechaHoraInicio</td></tr>
+    <tr><td align="left">fechaHoraFin</td></tr>
+    <tr><td align="left">duracionMinutos</td></tr></table>>];
+
+  usuarios [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#a33a3a">
+    <tr><td bgcolor="#a33a3a"><font color="white"><b>usuarios</b></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left">nombre</td></tr>
+    <tr><td align="left">correo : string <i>UQ</i></td></tr>
+    <tr><td align="left">password (hash bcrypt)</td></tr>
+    <tr><td align="left"><b>FK[]</b> roles : ObjectId[ ]</td></tr>
+    <tr><td align="left">mfaObligatorio</td></tr>
+    <tr><td align="left">twoFactorEnabled</td></tr>
+    <tr><td align="left">twoFactorSecret</td></tr>
+    <tr><td align="left">twoFactorRecoveryCodes[ ]</td></tr></table>>];
+
+  roles [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#a33a3a">
+    <tr><td bgcolor="#a33a3a"><font color="white"><b>roles</b> <i>(Sprint 7)</i></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left">nombreRol : string <i>UQ (activos)</i></td></tr>
+    <tr><td align="left">permisos : string[ ] (8 valores)</td></tr>
+    <tr><td align="left"><b>FK</b> usuarioCreacion / Actualizacion</td></tr></table>>];
+
+  eventos [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#5b6b7d">
+    <tr><td bgcolor="#5b6b7d"><font color="white"><b>eventos</b> <i>(solo inserción)</i></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left"><b>FK</b> usuarioId : ObjectId</td></tr>
+    <tr><td align="left"><b>FK</b> pedidoId : ObjectId <i>(opcional)</i></td></tr>
+    <tr><td align="left">accion : enum (13)</td></tr>
+    <tr><td align="left">detalles : object</td></tr>
+    <tr><td align="left">fechaHora : date</td></tr></table>>];
+
+  parametros [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#8a97a8">
+    <tr><td bgcolor="#8a97a8"><font color="white"><b>parametros</b> <i>(sin relaciones)</i></font></td></tr>
+    <tr><td align="left"><b>PK</b> _id : ObjectId</td></tr>
+    <tr><td align="left">clave : string <i>UQ</i></td></tr>
+    <tr><td align="left">valor : string</td></tr>
+    <tr><td align="left">descripcion : string</td></tr></table>>];
+
+  {rank=same; pedidos; eventos; usuarios;}
+  pedidos -> eventos -> usuarios [style=invis];
+  proveedores -> parametros -> roles [style=invis];
+  gateways -> descargas [style=invis];
+  {rank=same; gateways; descargas;}
+  {rank=same; proveedores; parametros; roles;}
+
+  proveedores -> pedidos;
+  pedidos     -> eventos;
+  usuarios    -> eventos [dir=both, arrowtail=teetee, arrowhead=crowodot, constraint=false];
+  pedidos     -> descargas;
+  gateways    -> descargas [constraint=false];
+  usuarios    -> descargas;
+  roles       -> usuarios  [label="  N : M  (roles[ ])", arrowtail=crowodot];
+  parametros  -> pedidos   [style=dashed, arrowhead=none, arrowtail=none, label="  configura (no es FK)", color="#8a97a8", fontcolor="#6b7686"];
+}

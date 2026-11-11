@@ -1,0 +1,42 @@
+digraph G {
+  graph [rankdir=TB, fontname="Helvetica", nodesep=0.22, ranksep=0.6, dpi=220, pad=0.2, compound=true, newrank=true];
+  node  [fontname="Helvetica", fontsize=12, shape=component, style="filled", fillcolor="#FFFFFF", color="#44536a", margin="0.14,0.08", width=1.5];
+  edge  [fontname="Helvetica", fontsize=9.5, color="#44536a", penwidth=1.3];
+
+  subgraph cluster_fe {
+    label=<<b>«subsistema» Frontend Next.js 16 (navegador)</b>>; style="rounded,filled"; fillcolor="#E8F1FB"; color="#2F6DB5"; labeljust=l;
+    ui  [label="UI por rol\noperador · coordinador\nadministrador"];
+    cola_ui [label="Pantalla /cola\n+ useColaRefresco"];
+    http [label="Cliente HTTP\nfetch + JWT en sesión"];
+    {rank=same; ui; cola_ui; http;}
+    http -> cola_ui [style=invis]; cola_ui -> ui [style=invis];
+  }
+  totp [label="App autenticadora\n(TOTP, en el celular)", fillcolor="#F6F6F6", style="filled,dashed"];
+
+  subgraph cluster_api {
+    label=<<b>«subsistema» API Express 5 (backend)</b>>; style="rounded,filled"; fillcolor="#EAF6EE"; color="#2b7a50"; labeljust=l;
+    rt   [label="Routers REST\n(13 rutas /api/*)"];
+    auth [label="verificarToken\n(JWT de acceso)"];
+    perm [label="checkPermission\n(RBAC dinámico)"];
+    ctl  [label="Controllers"];
+    svc  [label="Servicios de dominio\npuntualidad · descargas\nventanaHoraria"];
+    heap [label="Motor de cola\nprioridad + heap"];
+    mod  [label="Modelos Mongoose\n(8 colecciones)"];
+    {rank=same; rt; auth; perm;}
+    {rank=same; ctl; svc; heap;}
+    rt -> auth -> perm;
+    ctl -> svc -> heap;
+    perm -> ctl [constraint=true];
+    svc -> mod; heap -> mod;
+  }
+
+  subgraph cluster_db {
+    label=<<b>«subsistema» Base de datos</b>>; style="rounded,filled"; fillcolor="#F1EAF8"; color="#6b46a0"; labeljust=l;
+    mongo [shape=cylinder, style=filled, label="MongoDB\nlogistica_db"];
+  }
+
+  http -> rt [label="  «interfaz» REST / JSON · HTTP · puerto 4000", lhead=cluster_api];
+  mod -> mongo [label="  Mongoose ODM · TCP · 27017", lhead=cluster_db];
+  totp -> ui [style=dashed, arrowhead=none, label=" código de 6 dígitos"];
+  
+}
