@@ -1,0 +1,61 @@
+PASS src/__tests__/mfa.test.ts (6.443 s)
+  RN-16 — esFormatoDeCodigoValido(): exactamente seis digitos
+    ✓ PU-21: acepta seis digitos (2 ms)
+    ✓ PU-21: acepta los ceros a la izquierda (1 ms)
+    ✓ PU-21: tolera los espacios de un copiar y pegar
+    ✓ PU-22: rechaza cualquier largo que no sea seis (1 ms)
+    ✓ PU-22: rechaza lo que no sean digitos
+    ✓ PU-22: rechaza lo que no es ni texto ni numero entero (1 ms)
+    ✓ PU-22: acepta un numero entero de seis cifras
+  RN-16 — codigos de recuperacion
+    ✓ PU-23: genera la cantidad que declara el modelo (1 ms)
+    ✓ PU-23: todos tienen el formato XXXXX-XXXXX (1 ms)
+    ✓ PU-23: no usan caracteres que se confunden al copiarlos a mano (3 ms)
+    ✓ PU-23: no se repiten entre si (1 ms)
+    ✓ PU-23: dos tandas distintas no coinciden
+    ✓ PU-24: un codigo TOTP no pasa por codigo de recuperacion, ni al reves
+    ✓ PU-24: el formato de recuperacion rechaza lo que no cuadra
+    ✓ PU-24: se aceptan en minuscula, porque nadie los escribe en mayuscula
+    ✓ PU-24: hashearlos no deja ninguno en texto plano, y se pueden volver a encontrar (2509 ms)
+  RN-17 — limite de intentos por token temporal
+    ✓ PU-25: un token nuevo arranca sin intentos gastados
+    ✓ PU-25: corta recien despues del quinto codigo incorrecto
+    ✓ PU-25: el conteo es por token, no por usuario
+    ✓ PU-25: un codigo acertado borra el conteo del token
+    ✓ PU-25: el conteo de un token ya vencido deja de contar
+    ✓ PU-25: anotar un token nuevo descarta los conteos ya vencidos
+
+PASS src/__tests__/login.test.ts
+  RN-15 — decidirPasoDeLogin(): los cuatro casos posibles
+    ✓ PU-19: sin MFA obligatorio y sin MFA configurado, entra directo (1 ms)
+    ✓ PU-19: con el MFA ya configurado, hay que verificar el codigo
+    ✓ PU-19: con MFA obligatorio y sin configurar, hay que configurarlo
+    ✓ PU-19: con MFA obligatorio Y ya configurado, verifica (no reconfigura)
+  RN-15 — garantias de la decision
+    ✓ PU-20: siempre devuelve uno de los tres pasos declarados (1 ms)
+    ✓ PU-20: nunca entrega acceso directo si el MFA es obligatorio
+    ✓ PU-20: nunca entrega acceso directo si el MFA ya esta configurado
+    ✓ PU-20: el unico camino al acceso directo es sin exigencia y sin configurar (1 ms)
+
+PASS src/__tests__/tokens.test.ts
+  claims de los tokens Sprint 7
+    ✓ emite ACCESS con roles, permisos y sin el campo rol heredado (4 ms)
+    ✓ rechaza como ACCESS el token heredado que no contiene permisos
+    ✓ responde 401 ante un JWT ACCESS heredado sin permisos (2 ms)
+    ✓ mantiene MFA_TEMP separado y con duración de cinco minutos (1 ms)
+
+PASS src/__tests__/permisos.test.ts
+  permisos de roles
+    ✓ une permisos sin duplicados y conserva el orden de aparición (1 ms)
+    ✓ rechaza permisos fuera de la lista cerrada y listas vacías (6 ms)
+    ✓ normaliza una lista válida eliminando duplicados
+    ✓ no deja quitar los permisos administrativos del Administrador
+    ✓ no deja renombrar ni desactivar al Administrador (1 ms)
+    ✓ exige permisos administrativos si otro rol pasa a llamarse Administrador
+
+Test Suites: 4 passed, 4 total
+Tests:       40 passed, 40 total
+Snapshots:   0 total
+Time:        8.46 s
+Ran all test suites matching /src\/__tests__\/tokens.test.ts|src\/__tests__\/login.test.ts|src\/__tests__\/mfa.test.ts|src\/__tests__\/permisos.test.ts/i.
+done
