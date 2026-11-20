@@ -1,0 +1,238 @@
+PASS src/__tests__/mfa.test.ts
+  RN-16 — esFormatoDeCodigoValido(): exactamente seis digitos
+    ✓ PU-21: acepta seis digitos (2 ms)
+    ✓ PU-21: acepta los ceros a la izquierda
+    ✓ PU-21: tolera los espacios de un copiar y pegar (1 ms)
+    ✓ PU-22: rechaza cualquier largo que no sea seis
+    ✓ PU-22: rechaza lo que no sean digitos (1 ms)
+    ✓ PU-22: rechaza lo que no es ni texto ni numero entero
+    ✓ PU-22: acepta un numero entero de seis cifras
+  RN-16 — codigos de recuperacion
+    ✓ PU-23: genera la cantidad que declara el modelo (1 ms)
+    ✓ PU-23: todos tienen el formato XXXXX-XXXXX (5 ms)
+    ✓ PU-23: no usan caracteres que se confunden al copiarlos a mano (3 ms)
+    ✓ PU-23: no se repiten entre si (1 ms)
+    ✓ PU-23: dos tandas distintas no coinciden (1 ms)
+    ✓ PU-24: un codigo TOTP no pasa por codigo de recuperacion, ni al reves
+    ✓ PU-24: el formato de recuperacion rechaza lo que no cuadra
+    ✓ PU-24: se aceptan en minuscula, porque nadie los escribe en mayuscula
+    ✓ PU-24: hashearlos no deja ninguno en texto plano, y se pueden volver a encontrar (2852 ms)
+  RN-17 — limite de intentos por token temporal
+    ✓ PU-25: un token nuevo arranca sin intentos gastados
+    ✓ PU-25: corta recien despues del quinto codigo incorrecto (1 ms)
+    ✓ PU-25: el conteo es por token, no por usuario (1 ms)
+    ✓ PU-25: un codigo acertado borra el conteo del token
+    ✓ PU-25: el conteo de un token ya vencido deja de contar
+    ✓ PU-25: anotar un token nuevo descarta los conteos ya vencidos
+
+PASS src/__tests__/gateways.test.ts
+  RN-08 — exclusividad del Gateway 5
+    ✓ PU-06: el gateway 5 solo admite carga de construccion (1 ms)
+    ✓ PU-06: la constante de bahia exclusiva es efectivamente la 5
+    ✓ PU-07: ninguna bahia distinta de la 5 admite carga de construccion (1 ms)
+    ✓ PU-07: carga general nunca se resuelve a la bahia exclusiva
+  RN-07 — catalogo de bahias y tipos de carga
+    ✓ PU-08: el rango de bahias fisicas va de 1 a 5
+    ✓ PU-08: las cinco bahias tienen un tipo de carga asignado
+    ✓ PU-09: solo existen dos tipos de carga y son los del enunciado
+    ✓ PU-09: los estados de una bahia son LIBRE, OCUPADO y FUERA DE SERVICIO
+    ✓ PU-09: todo tipo esperado pertenece al catalogo cerrado de tipos de carga (1 ms)
+
+PASS src/__tests__/construirCola.test.ts
+  ordenarCola — orden y desempates
+    ✓ ordena por prioridad (ANTICIPADO primero que A TIEMPO primero que TARDÍO, con la misma espera) (1 ms)
+    ✓ en empate de prioridad, desempata por hora programada ascendente (1 ms)
+    ✓ en empate de prioridad y de cita, desempata por ingreso a la cola ascendente
+    ✓ en empate total, desempata por _id ascendente
+    ✓ un TARDÍO con 60 min de espera supera a un A TIEMPO recien llegado
+    ✓ cambiar factorAgingMin cambia el orden
+    ✓ cola vacia devuelve []
+    ✓ un pedido sin fechaHoraIngresoCola usa la llegada real (1 ms)
+  elegirSiguiente — filtro por tipo de carga
+    ✓ con un gateway de "construcción" ignora los pedidos "general" aunque tengan mas prioridad
+    ✓ sin pedidos compatibles devuelve null
+  candidatosParaGateway
+    ✓ ignora los pedidos incompatibles
+    ✓ conserva el orden de prioridad entre los compatibles
+    ✓ lista vacia si no hay pedidos compatibles
+
+PASS src/__tests__/numeroPedido.test.ts
+  RN-03 — formato del numero de pedido
+    ✓ PU-15: arranca en 000000001 cuando no hay ningun pedido previo (1 ms)
+    ✓ PU-15: el correlativo se rellena siempre a nueve digitos (1 ms)
+    ✓ PU-16: incrementa a partir del correlativo mas alto existente
+    ✓ PU-16: maneja el salto de decena sin perder el relleno (1 ms)
+    ✓ PU-17: respeta el numero de equipo que recibe
+    ✓ PU-17: consulta filtrando por el prefijo del equipo
+    ✓ PU-18: si el correlativo guardado no es numerico, vuelve a empezar en 1 (4 ms)
+    ✓ PU-18: el formato completo coincide con el patron del enunciado
+
+PASS src/__tests__/ventanaHoraria.test.ts
+  RN-01 — horario operativo y dias habiles
+    ✓ PU-10: un jueves es dia habil
+    ✓ PU-10: un domingo no es dia habil
+    ✓ PU-10: los limites del dia son la apertura y el cierre configurados (1 ms)
+    ✓ PU-10: el texto del horario se arma con la configuracion vigente
+  RN-02 — la ventana debe entrar completa en el horario
+    ✓ PU-11: una ventana de 09:00 a 10:00 entra en el horario
+    ✓ PU-11: una ventana que termina despues del cierre se rechaza
+    ✓ PU-11: una ventana que empieza antes de la apertura se rechaza
+    ✓ PU-11: una ventana en dia no habil se rechaza aunque la hora sea valida
+  RN-02 — solapamiento entre citas
+    ✓ PU-12: dos ventanas que comparten tiempo se solapan
+    ✓ PU-12: dos turnos consecutivos NO se solapan (comparacion estricta)
+    ✓ PU-12: una ventana contenida dentro de otra se solapa
+  RN-14 — reprogramacion: busqueda de huecos y alternativas
+    ✓ PU-13: devuelve el horario pedido cuando esta libre
+    ✓ PU-13: salta al final de la ventana ocupada cuando hay choque (1 ms)
+    ✓ PU-13: devuelve null si el dia no es habil
+    ✓ PU-13: devuelve null si ya no queda lugar antes del cierre
+    ✓ PU-14: ofrece tres alternativas que no se pisan entre si
+    ✓ PU-14: las alternativas saltean los dias no habiles (1 ms)
+
+PASS src/__tests__/permisos.test.ts
+  permisos de roles
+    ✓ une permisos sin duplicados y conserva el orden de aparición
+    ✓ rechaza permisos fuera de la lista cerrada y listas vacías (16 ms)
+    ✓ normaliza una lista válida eliminando duplicados
+    ✓ no deja quitar los permisos administrativos del Administrador (1 ms)
+    ✓ no deja renombrar ni desactivar al Administrador
+    ✓ exige permisos administrativos si otro rol pasa a llamarse Administrador (1 ms)
+
+PASS src/__tests__/tokens.test.ts
+  claims de los tokens Sprint 7
+    ✓ emite ACCESS con roles, permisos y sin el campo rol heredado (4 ms)
+    ✓ rechaza como ACCESS el token heredado que no contiene permisos
+    ✓ responde 401 ante un JWT ACCESS heredado sin permisos (1 ms)
+    ✓ mantiene MFA_TEMP separado y con duración de cinco minutos (1 ms)
+
+PASS src/__tests__/puntualidad.test.ts
+  RN-04 — minutosDeDiferencia()
+    ✓ PU-01: devuelve negativo cuando el camion llega antes de la hora
+    ✓ PU-01: devuelve positivo cuando el camion llega despues de la hora
+    ✓ PU-01: redondea al minuto mas cercano
+  RN-04 — clasificarLlegada()
+    ✓ PU-02: clasifica ANTICIPADO cuando llega mas de 15 minutos antes
+    ✓ PU-02: el minuto exacto del margen todavia es A TIEMPO (limite inferior)
+    ✓ PU-03: clasifica A TIEMPO una llegada a los 12 minutos (escenario Gherkin 1)
+    ✓ PU-03: el minuto 15 cuenta a favor del proveedor (limite superior) (1 ms)
+    ✓ PU-04: clasifica TARDIO una llegada a los 25 minutos (escenario Gherkin 2)
+    ✓ PU-04: el minuto 60 todavia es TARDIO, no AUSENTE
+    ✓ PU-05: clasifica AUSENTE pasado el limite de ausencia (escenario Gherkin 3)
+    ✓ PU-05: cubre las cuatro clasificaciones posibles (RNF-01, cobertura 100%)
+    ✓ PU-05: respeta tolerancias distintas de las de por defecto (RN-04 configurable)
+  RN-04 — limiteDeAusencia()
+    ✓ PU-05: el limite cae exactamente a los ausenteMinutos del inicio
+    ✓ PU-05: no modifica la fecha de inicio que recibe
+
+PASS src/__tests__/programadaParaPuntualidad.test.ts
+  ✓ AUSENTE no está soportado: lanza un error en vez de devolver una ventana sin sentido (2 ms)
+  programadaParaPuntualidad — tolerancias por defecto
+    ✓ clasificarLlegada confirma ANTICIPADO
+    ✓ clasificarLlegada confirma A TIEMPO (1 ms)
+    ✓ clasificarLlegada confirma TARDÍO
+    ✓ TARDÍO queda por debajo del límite de AUSENTE
+    ✓ finVentana queda duracionMinutos después de inicioVentana
+  programadaParaPuntualidad — tolerancias distintas
+    ✓ clasificarLlegada confirma ANTICIPADO
+    ✓ clasificarLlegada confirma A TIEMPO
+    ✓ clasificarLlegada confirma TARDÍO (1 ms)
+    ✓ TARDÍO queda por debajo del límite de AUSENTE
+    ✓ finVentana queda duracionMinutos después de inicioVentana
+
+PASS src/__tests__/validarTurno.test.ts
+  verificarTurno
+    ✓ el primero de la lista pasa
+    ✓ el segundo es rechazado y la sugerencia es el primero (1 ms)
+    ✓ un pedido ausente de la lista pasa (dato inconsistente, no se bloquea)
+    ✓ lista vacia pasa
+
+PASS src/__tests__/prioridad.test.ts
+  PRIORIDAD_BASE — orden base por puntualidad
+    ✓ A TIEMPO > ANTICIPADO > TARDÍO
+  calcularPrioridad — aging con factor 20
+    ✓ 19 minutos de espera no suman nada (+0) (1 ms)
+    ✓ 20 minutos de espera suman un punto (+1)
+    ✓ 39 minutos de espera siguen sumando un solo punto (+1)
+    ✓ 40 minutos de espera suman dos puntos (+2)
+    ✓ una puntualidad no reconocida usa la base mas baja (1)
+    ✓ factor 0 lanza error (7 ms)
+    ✓ factor negativo lanza error
+  calcularMinutosEspera
+    ✓ con fecha futura ("desde" posterior a "ahora") devuelve 0, nunca negativo (1 ms)
+    ✓ calcula los minutos completos transcurridos
+  compararPedidosCola — desempate por aging y por hora programada
+    ✓ un TARDÍO con 40 min de espera empata en prioridad con un A TIEMPO recien llegado y gana por hora programada mas temprana
+    ✓ el mismo TARDÍO con 60 min de espera supera al A TIEMPO por prioridad, sin importar la hora programada
+    ✓ con prioridad y cita iguales, desempata por fechaHoraIngresoCola ascendente
+    ✓ con todo igual, desempata por _id ascendente (determinista) (1 ms)
+
+PASS src/__tests__/heapBinario.test.ts
+  HeapBinario — orden de extraccion
+    ✓ extrae en el mismo orden que un sort con el mismo comparador (50 elementos) (1 ms)
+    ✓ desdeArreglo da el mismo resultado que insertar uno por uno (1 ms)
+    ✓ extraer en heap vacio devuelve undefined
+    ✓ resuelve los empates de forma deterministica (mismo orden de insercion, mismo resultado) (1 ms)
+    ✓ verTope devuelve el elemento mas prioritario sin quitarlo
+
+PASS src/__tests__/cambiosAging.test.ts
+  calcularCambiosAging
+    ✓ solo reporta pedidos cuyo nivel de prioridad subio (1 ms)
+    ✓ sin pedidos que hayan subido, devuelve []
+    ✓ sin prioridadCalculada guardada, usa la base como anterior
+    ✓ lista vacia devuelve [] (5 ms)
+
+PASS src/__tests__/login.test.ts
+  RN-15 — decidirPasoDeLogin(): los cuatro casos posibles
+    ✓ PU-19: sin MFA obligatorio y sin MFA configurado, entra directo (1 ms)
+    ✓ PU-19: con el MFA ya configurado, hay que verificar el codigo
+    ✓ PU-19: con MFA obligatorio y sin configurar, hay que configurarlo
+    ✓ PU-19: con MFA obligatorio Y ya configurado, verifica (no reconfigura)
+  RN-15 — garantias de la decision
+    ✓ PU-20: siempre devuelve uno de los tres pasos declarados
+    ✓ PU-20: nunca entrega acceso directo si el MFA es obligatorio
+    ✓ PU-20: nunca entrega acceso directo si el MFA ya esta configurado
+    ✓ PU-20: el unico camino al acceso directo es sin exigencia y sin configurar
+
+----------------------------|---------|----------|---------|---------|------------------------
+File                        | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s      
+----------------------------|---------|----------|---------|---------|------------------------
+All files                   |   35.35 |    29.91 |   34.09 |   33.38 |                        
+ models                     |   37.73 |     8.33 |    12.5 |      36 |                        
+  Descarga.ts               |       0 |      100 |     100 |       0 | 1-67                   
+  Evento.ts                 |       0 |        0 |       0 |       0 | 1-195                  
+  Gateway.ts                |      75 |    33.33 |      50 |   73.68 | 103-110                
+  Parametro.ts              |       0 |      100 |     100 |       0 | 1-53                   
+  Pedido.ts                 |       0 |        0 |       0 |       0 | 1-260                  
+  Proveedor.ts              |    87.5 |        0 |       0 |   85.71 | 19                     
+  Role.ts                   |      75 |        0 |       0 |      75 | 50-52                  
+  Usuario.ts                |   33.33 |        0 |       0 |   36.36 | 81-132,150-155,172-180 
+  auditoria.ts              |     100 |      100 |     100 |     100 |                        
+ services                   |   34.98 |    32.38 |   37.06 |   32.93 |                        
+  borradoLogico.ts          |       0 |        0 |       0 |       0 | 17-31                  
+  cola.ts                   |       0 |        0 |       0 |       0 | 1-186                  
+  configuracionOperativa.ts |       0 |        0 |       0 |       0 | 1-252                  
+  controlAusencias.ts       |       0 |        0 |       0 |       0 | 1-60                   
+  descargas.ts              |       0 |        0 |       0 |       0 | 2-239                  
+  eventos.ts                |       0 |        0 |       0 |       0 | 3-77                   
+  intentosMfa.ts            |     100 |      100 |     100 |     100 |                        
+  kpis.ts                   |       0 |        0 |       0 |       0 | 2-365                  
+  lecturaCola.ts            |       0 |        0 |       0 |       0 | 1-75                   
+  login.ts                  |     100 |      100 |     100 |     100 |                        
+  mfa.ts                    |   94.23 |    91.66 |   76.92 |    92.5 | 82,98,107              
+  numeroPedido.ts           |     100 |      100 |     100 |     100 |                        
+  ordenCola.ts              |       0 |      100 |       0 |       0 | 2-35                   
+  permisos.ts               |   96.96 |     86.2 |     100 |   96.29 | 58                     
+  promocionCola.ts          |       0 |        0 |       0 |       0 | 2-126                  
+  puntualidad.ts            |     100 |      100 |     100 |     100 |                        
+  respuestasError.ts        |       0 |        0 |       0 |       0 | 2-72                   
+  roles.ts                  |       0 |        0 |       0 |       0 | 1-178                  
+  tokens.ts                 |   87.09 |       50 |     100 |   84.61 | 53-54,128,138          
+  usuarioAuditoria.ts       |       0 |        0 |       0 |       0 | 2-36                   
+  ventanaHoraria.ts         |   92.64 |    88.88 |   83.33 |   92.59 | 59-66                  
+----------------------------|---------|----------|---------|---------|------------------------
+Test Suites: 14 passed, 14 total
+Tests:       139 passed, 139 total
+Snapshots:   0 total
+Time:        6.33 s, estimated 13 s
+Ran all test suites.
