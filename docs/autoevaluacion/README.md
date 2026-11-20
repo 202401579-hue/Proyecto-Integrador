@@ -25,4 +25,4 @@ Evidencias de la Ficha de Autoevaluación (Grupo N.º 1, Sección 1-1, MDS 0, ci
 3. Ejecutar primero `POST /api/auth/login`: guarda el token en la variable `token`.
 4. Ejecutar la colección con Collection Runner. Cada solicitud registra si respondió en menos de 200 ms y sin error 500.
 
-Nota: la colección no está ejecutada contra un servidor en este repositorio; los tiempos medidos deben anexarse en la ficha.
+Nota: los tiempos de la ficha (promedio de 1.2 a 1.4 ms por ruta, con 69 pedidos y 182 eventos) se midieron con un script local de 10 repeticiones por ruta, no con esta colección. La colección queda como instrumento para repetir la medición con más volumen.
