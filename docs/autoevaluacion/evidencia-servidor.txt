@@ -1,0 +1,73 @@
+EVIDENCIA DEL SERVIDOR LINUX (GSO 0) — salidas copiadas tal cual de la terminal
+Servidor: oms-srv02 (VMware), consultado el 21 de noviembre de 2026.
+
+$ cat /etc/os-release
+PRETTY_NAME="Ubuntu 26.04.1 LTS"
+NAME="Ubuntu"
+VERSION_ID="26.04"
+VERSION="26.04.1 LTS (Resolute Raccoon)"
+
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:           1.6Gi       687Mi       210Mi       1.3Mi       849Mi       907Mi
+Swap:          1.8Gi          0B       1.8Gi
+
+$ df -h /
+Filesystem                         Size  Used Avail Use% Mounted on
+/dev/mapper/ubuntu--vg-ubuntu--lv   11G  7.1G  3.2G  70% /
+
+$ systemctl status mongod --no-pager   (extracto)
+     Loaded: loaded (/usr/lib/systemd/system/mongod.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-11-21 01:57:06 CST
+
+$ journalctl --list-boots | tail -5
+ -4 Sun 2026-11-15 17:23:00 CST  ->  Mon 2026-11-16 00:32:37 CST
+ -3 Mon 2026-11-16 00:32:50 CST  ->  Mon 2026-11-16 01:21:21 CST
+ -2 Thu 2026-11-19 16:00:25 CST  ->  Thu 2026-11-19 16:35:20 CST
+ -1 Thu 2026-11-19 16:35:32 CST  ->  Thu 2026-11-19 17:42:10 CST
+  0 Sat 2026-11-21 01:56:31 CST  ->  (en curso)
+
+$ cat /etc/cron.d/omnistock
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/5 * * * * root /opt/omnistock/scripts/monitor.sh
+30 2 * * * root /opt/omnistock/scripts/backup.sh
+0 3 * * 0 root /opt/omnistock/scripts/clean_logs.sh
+
+$ systemctl is-active cron
+active
+
+Observación: la VM se enciende por sesiones y se apaga cuando no se usa; la programación de cron solo corre mientras está encendida.
+
+---- Segunda toma: 21 de noviembre de 2026, después de las 02:30 ----
+
+$ ls -lt /srv/backups/omnistock | head -5
+total 52
+-rw------- 1 root omni-admins    94 Nov 21 02:30 backup_20261121_0230.tar.gz.sha256
+-rw------- 1 root omni-admins 11023 Nov 21 02:30 backup_20261121_0230.tar.gz
+-rw------- 1 root omni-admins    94 Nov 19 16:38 backup_20261119_1638.tar.gz.sha256
+-rw------- 1 root omni-admins 11014 Nov 19 16:38 backup_20261119_1638.tar.gz
+
+$ journalctl -u cron --since today --no-pager | tail -15   (extracto)
+Nov 21 02:20:01 oms-srv02 CRON[2604]: (root) CMD (/opt/omnistock/scripts/monitor.sh)
+Nov 21 02:25:01 oms-srv02 CRON[2639]: (root) CMD (/opt/omnistock/scripts/monitor.sh)
+Nov 21 02:30:01 oms-srv02 CRON[2672]: (root) CMD (/opt/omnistock/scripts/monitor.sh)
+Nov 21 02:30:01 oms-srv02 CRON[2671]: (root) CMD (/opt/omnistock/scripts/backup.sh)
+
+$ for b in -1 -2 -3 -4; do echo "== arranque $b"; journalctl -b $b -n 2 --no-pager; done
+== arranque -1   (19-nov 16:35 -> 17:42)
+Nov 19 17:42:07 oms-srv02 kernel: audit: type=1400 ... apparmor="DENIED" ... comm="who" ...
+Nov 19 17:42:10 oms-srv02 chronyd[1414]: Selected source 185.125.190.122 (1.ntp.ubuntu.com)
+== arranque -2   (19-nov 16:00 -> 16:35)
+Nov 19 16:35:20 oms-srv02 systemd[1]: Stopped systemd-tmpfiles-setup.service - Create System Files and Directories.
+Nov 19 16:35:20 oms-srv02 systemd[1]: Stopping systemd-journal-flush.service - Flush Journal to Persistent Storage...
+== arranque -3   (16-nov 00:32 -> 01:21)
+Nov 16 01:21:21 oms-srv02 systemd[1]: Stopped systemd-tmpfiles-setup.service - Create System Files and Directories.
+Nov 16 01:21:21 oms-srv02 systemd[1]: Stopping systemd-journal-flush.service - Flush Journal to Persistent Storage...
+== arranque -4   (15-nov 17:23 -> 16-nov 00:32)
+Nov 16 00:32:37 oms-srv02 systemd[1]: Stopped systemd-tmpfiles-setup.service - Create System Files and Directories.
+Nov 16 00:32:37 oms-srv02 systemd[1]: Stopping systemd-journal-flush.service - Flush Journal to Persistent Storage...
+
+Lectura: el respaldo de las 02:30 y el monitoreo cada 5 minutos fueron lanzados por cron sin intervención manual.
+Los arranques -2, -3 y -4 terminan con la secuencia normal de apagado de systemd (apagado limpio). El arranque -1
+termina sin esa secuencia (posible apagado forzado de la VM).

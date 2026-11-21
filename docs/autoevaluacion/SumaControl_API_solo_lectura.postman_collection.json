@@ -1,0 +1,515 @@
+{
+  "info": {
+    "name": "SumaControl API — Grupo N.º 1 (solo lectura)",
+    "description": "Versión segura de la colección: solo el login y las solicitudes GET. No crea, modifica ni borra datos. Cada solicitud verifica tiempo < 200 ms y ausencia de error 500. Ejecutar completa con el Collection Runner o con newman.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "correo",
+      "value": "admin@sumacontrol.test"
+    },
+    {
+      "key": "password",
+      "value": "CAMBIAR"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "tempToken",
+      "value": ""
+    },
+    {
+      "key": "proveedorId",
+      "value": ""
+    },
+    {
+      "key": "pedidoId",
+      "value": ""
+    },
+    {
+      "key": "gatewayId",
+      "value": ""
+    },
+    {
+      "key": "descargaId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Salud",
+      "description": "",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Autenticación (HU-004)",
+      "description": "",
+      "item": [
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Devuelve token ACCESS, o mfaRequired/tempToken si hay segundo factor. Guarda el token en la variable de colección.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.token) { pm.collectionVariables.set(\"token\", j.token); }",
+                  "if (j.tempToken) { pm.collectionVariables.set(\"tempToken\", j.tempToken); }",
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/auth/perfil",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/perfil",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "perfil"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Usuarios y roles (HU-005, HU-006)",
+      "description": "",
+      "item": [
+        {
+          "name": "GET /api/usuarios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Proveedores y pedidos (HU-001)",
+      "description": "",
+      "item": [
+        {
+          "name": "GET /api/proveedores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/proveedores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "proveedores"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/pedidos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Gateways y descargas (HU-003, RN-07, RN-08)",
+      "description": "",
+      "item": [
+        {
+          "name": "GET /api/gateways",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/gateways",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "gateways"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/descargas/activas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/descargas/activas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "descargas",
+                "activas"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Cola, KPIs y bitácora (HU-003, EDA 0)",
+      "description": "",
+      "item": [
+        {
+          "name": "GET /api/cola",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/cola",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cola"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/kpis",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/kpis",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "kpis"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/eventos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/eventos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Parámetros",
+      "description": "",
+      "item": [
+        {
+          "name": "GET /api/parametros",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/parametros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parametros"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Tiempo de respuesta < 200 ms (RNF-02)\", function () { pm.expect(pm.response.responseTime).to.be.below(200); });",
+                  "pm.test(\"Sin error de servidor (< 500)\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

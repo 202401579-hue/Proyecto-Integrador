@@ -1,0 +1,97 @@
+(node:9420) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+newman
+
+SumaControl API — Grupo N.º 1 (solo lectura)
+
+□ 00 Salud
+└ GET /api/health
+  GET http://localhost:4001/api/health [200 OK, 347B, 27ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+□ 01 Autenticación (HU-004)
+└ POST /api/auth/login
+  POST http://localhost:4001/api/auth/login [200 OK, 707B, 97ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+└ GET /api/auth/perfil
+  GET http://localhost:4001/api/auth/perfil [200 OK, 547B, 5ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+□ 02 Usuarios y roles (HU-005, HU-006)
+└ GET /api/usuarios
+  GET http://localhost:4001/api/usuarios [200 OK, 1.42kB, 12ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+└ GET /api/roles
+  GET http://localhost:4001/api/roles [200 OK, 1.25kB, 6ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+□ 03 Proveedores y pedidos (HU-001)
+└ GET /api/proveedores
+  GET http://localhost:4001/api/proveedores [200 OK, 301B, 5ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+└ GET /api/pedidos
+  GET http://localhost:4001/api/pedidos [200 OK, 301B, 11ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+□ 05 Gateways y descargas (HU-003, RN-07, RN-08)
+└ GET /api/gateways
+  GET http://localhost:4001/api/gateways [200 OK, 1.57kB, 5ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+└ GET /api/descargas/activas
+  GET http://localhost:4001/api/descargas/activas [200 OK, 301B, 6ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+□ 06 Cola, KPIs y bitácora (HU-003, EDA 0)
+└ GET /api/cola
+  GET http://localhost:4001/api/cola [200 OK, 394B, 7ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+└ GET /api/kpis
+  GET http://localhost:4001/api/kpis [200 OK, 1.73kB, 28ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+└ GET /api/eventos
+  GET http://localhost:4001/api/eventos [200 OK, 34.58kB, 16ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+□ 07 Parámetros
+└ GET /api/parametros
+  GET http://localhost:4001/api/parametros [200 OK, 3.36kB, 5ms]
+  √  Tiempo de respuesta < 200 ms (RNF-02)
+  √  Sin error de servidor (< 500)
+
+┌─────────────────────────┬──────────────────┬──────────────────┐
+│                         │         executed │           failed │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              iterations │                1 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│                requests │               13 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│            test-scripts │               13 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│      prerequest-scripts │                0 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              assertions │               26 │                0 │
+├─────────────────────────┴──────────────────┴──────────────────┤
+│ total run duration: 1315ms                                    │
+├───────────────────────────────────────────────────────────────┤
+│ total data received: 42.87kB (approx)                         │
+├───────────────────────────────────────────────────────────────┤
+│ average response time: 17ms [min: 5ms, max: 97ms, s.d.: 24ms] │
+└───────────────────────────────────────────────────────────────┘

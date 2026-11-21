@@ -1,0 +1,175 @@
+
+> backend@1.0.0 test:funcional
+> ts-node-dev --transpile-only src/pruebas/ejecutar.ts
+
+[INFO] 01:49:04 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+
+========================================================================
+PRUEBAS FUNCIONALES E INTEGRALES — SumaControl (Grupo N.º 1)
+API bajo prueba: http://localhost:4001
+========================================================================
+→ Conectado a MongoDB.
+→ Las cinco bahías están sembradas y con su tipo de carga correcto.
+→ Residuos de corridas anteriores eliminados: 0 pedido(s) sin proveedor.
+→ Autenticación verificada contra POST /api/auth/login.
+
+▸ CP-01 — Proveedor puntual con gateway general libre
+  [RN-04, RN-05, RN-07]
+    · Clasificación: A TIEMPO (-5 min de diferencia)
+    · Hora de arribo asentada por el servidor: 2026-11-21T07:49:05.607Z
+    · Gateway 1 OCUPADO y pedido en DESCARGANDO.
+  ✔ PASS
+
+▸ CP-02 — Proveedor puntual sin bahía general disponible
+  [RN-10]
+    · Los cuatro gateways generales rechazaron la asignación (400).
+    · Gateway 5: El gateway 5 solo admite carga "construcción"
+    · El pedido quedó en estado EN COLA, a la espera de bahía compatible.
+  ✔ PASS
+
+▸ CP-03 — Proveedor tardío que excede la ventana de tolerancia
+  [RN-04]
+    · Clasificación TARDÍO con 25 minutos de diferencia.
+    · Llegar tarde no excluye al pedido: sigue siendo elegible para descarga.
+  ✔ PASS
+
+▸ CP-04 — Proveedor ausente que no se presenta en toda la ventana
+  [RN-06]
+    · El control de ausencias marcó el pedido como AUSENTE.
+    · El hecho queda disponible en GET /api/eventos para auditoría.
+  ✔ PASS
+
+▸ CP-05 — Producto de construcción asignado al Gateway 5
+  [RN-08]
+    · Gateway 2: El gateway 2 solo admite carga "general"
+    · Asignación exclusiva al Gateway 5 confirmada.
+  ✔ PASS
+
+▸ CP-06 — Carga general rechazada en el Gateway 5 con el resto ocupado
+  [RN-07, RN-08]
+    · Respuesta: El gateway 5 solo admite carga "construcción"
+    · La exclusividad se respeta aun siendo la única bahía disponible.
+  ✔ PASS
+
+▸ CP-07 — Finalización de descarga en bahía general y promoción de cola
+  [RN-09, RN-11, RN-12]
+    · La bahía se reasignó al pedido con la llegada más antigua (B), no al más reciente.
+  ✔ PASS
+
+▸ CP-08 — Finalización en Gateway 5 con promoción filtrada por tipo
+  [RN-08, RN-11, RN-12]
+    · La antigüedad en cola no sobrescribe la exclusividad de RN-08.
+  ✔ PASS
+
+▸ CP-09 — Bahía fuera de servicio excluida de toda asignación
+  [RN-13]
+    · Rechazo del Gateway 3 (FUERA DE SERVICIO): El gateway no está disponible: ya fue ocupado o no está LIBRE
+    · Control: el mismo pedido fue aceptado en el Gateway 1, así que el rechazo anterior se debió al estado de la bahía 3 y no al pedido.
+    · La vía automática no puede alcanzar una bahía inhabilitada: la promoción solo apunta a la bahía que se libera, y allí no puede iniciarse una descarga.
+  ✔ PASS
+
+▸ CP-10 — Orden de atención de la cola por antigüedad de arribo
+  [RN-12]
+    · En cola: P1 arribó hace 40 min, P2 hace 80 min, P3 hace 10 min.
+    · La hora programada de la cita no alteró el orden: manda la hora de arribo.
+  ✔ PASS
+
+▸ CP-11 — Reprogramación de cita con validación de horario y solapamiento
+  [RN-01, RN-02, RN-14]
+    · Solapamiento rechazado; se ofrecieron 3 alternativas.
+    · Fuera de horario rechazado: El pedido debe programarse dentro del horario operativo (07:00 a 17:00)
+    · Reprogramación aplicada; el evento CITA_REPROGRAMADA conserva la ventana anterior.
+  ✔ PASS
+
+▸ CP-12 — Autogeneración correlativa del número de pedido
+  [RN-03]
+    · Primer correlativo generado por el servidor: PED-EQUI04-000000001
+    · Segundo correlativo: PED-EQUI04-000000002 (el cancelado no se reutilizó).
+  ✔ PASS
+
+▸ CP-13 — GET /api/cola ordena por prioridad con esperas iguales (Sprint 6)
+  [RN-04, RN-12 (prioridad y aging)]
+    · Orden relativo confirmado: A TIEMPO (#1) antes que ANTICIPADO (#2) antes que TARDÍO (#3).
+  ✔ PASS
+
+▸ CP-14 — La promoción automática nunca cruza tipos de carga (Sprint 6)
+  [RN-07, RN-08, RN-11]
+    · Un pedido de construcción no se promovió a un gateway general liberado.
+    · Un pedido general tampoco se promovió al Gateway 5 (construcción).
+  ✔ PASS
+
+▸ CP-15 — POST /api/descargas/iniciar respeta el orden estricto de la cola (Sprint 6)
+  [RN-12 (orden estricto)]
+    · Rechazo 409: Debe atenderse primero el pedido QA-1795247346199-025 (prioridad 5003, 100000 min en espera)
+    · El pedido que intentó saltarse el orden permanece sin iniciar.
+  ✔ PASS
+
+▸ PI-01 — Alta de proveedor y programación de cita por la API
+  [RN-01, RN-02, RN-03 · HU-001 / CU-01]
+    · Proveedor dado de alta mediante POST /api/proveedores.
+    · Pedido persistido con el correlativo PED-EQUI04-000000001.
+    · Ventana calculada por el servidor y auditoría a nombre de Carlos Coordinador.
+  ✔ PASS
+
+▸ PI-02 — Registro de llegada y clasificación con asiento en bitácora
+  [RN-04, RN-05 · HU-002 / CU-02]
+    · Clasificación ANTICIPADO con -3371 minutos respecto del inicio de la ventana.
+    · Arribo asentado por el servidor a las 2026-11-21T07:49:06.243Z.
+    · El hecho quedó disponible en GET /api/eventos para auditoría.
+  ✔ PASS
+
+▸ PI-03 — Ciclo completo de descarga con promoción automática de cola
+  [RN-09, RN-11, RN-12 · HU-003 / CU-03]
+    · Ciclo completo verificado: alta, llegada, descarga, cierre y promoción automática.
+    · La promoción ocurrió sin intervención del operador, en la misma transacción del cierre.
+  ✔ PASS
+
+▸ PI-04 — Cálculo de indicadores sobre la operación registrada
+  [RNF-03 · Tablero de indicadores]
+    · El tablero devuelve los cinco bloques de indicadores con el período solicitado.
+    · Cumplimiento: 0 antes y 2 después de registrar dos arribos.
+    · Distribución consistente: 2 pedidos y 100% acumulado.
+  ✔ PASS
+
+▸ PI-05 — Matriz de permisos dinámicos para los tres roles base
+  [Sprint 7 — matriz RBAC]
+    · 15 rutas rechazaron solicitudes sin token.
+    · 32 combinaciones permitidas y 13 denegadas.
+    · Coordinador no puede leer /api/parametros: la guía lo asigna al permiso roles.
+  ✔ PASS
+
+▸ PI-06 — Rol personalizado, revocación inmediata y baja protegida
+  [Sprint 7 — roles dinámicos]
+    · La revocación se comprobó con el mismo JWT: checkPermission recargó MongoDB.
+  ✔ PASS
+
+→ Datos de prueba eliminados; las bahías volvieron a LIBRE.
+
+========================================================================
+RESUMEN DE PRUEBAS FUNCIONALES E INTEGRALES — SumaControl (Grupo N.º 1)
+========================================================================
+✔ CP-01  PASS  Proveedor puntual con gateway general libre
+✔ CP-02  PASS  Proveedor puntual sin bahía general disponible
+✔ CP-03  PASS  Proveedor tardío que excede la ventana de tolerancia
+✔ CP-04  PASS  Proveedor ausente que no se presenta en toda la ventana
+✔ CP-05  PASS  Producto de construcción asignado al Gateway 5
+✔ CP-06  PASS  Carga general rechazada en el Gateway 5 con el resto ocupado
+✔ CP-07  PASS  Finalización de descarga en bahía general y promoción de cola
+✔ CP-08  PASS  Finalización en Gateway 5 con promoción filtrada por tipo
+✔ CP-09  PASS  Bahía fuera de servicio excluida de toda asignación
+✔ CP-10  PASS  Orden de atención de la cola por antigüedad de arribo
+✔ CP-11  PASS  Reprogramación de cita con validación de horario y solapamiento
+✔ CP-12  PASS  Autogeneración correlativa del número de pedido
+✔ CP-13  PASS  GET /api/cola ordena por prioridad con esperas iguales (Sprint 6)
+✔ CP-14  PASS  La promoción automática nunca cruza tipos de carga (Sprint 6)
+✔ CP-15  PASS  POST /api/descargas/iniciar respeta el orden estricto de la cola (Sprint 6)
+✔ PI-01  PASS  Alta de proveedor y programación de cita por la API
+✔ PI-02  PASS  Registro de llegada y clasificación con asiento en bitácora
+✔ PI-03  PASS  Ciclo completo de descarga con promoción automática de cola
+✔ PI-04  PASS  Cálculo de indicadores sobre la operación registrada
+✔ PI-05  PASS  Matriz de permisos dinámicos para los tres roles base
+✔ PI-06  PASS  Rol personalizado, revocación inmediata y baja protegida
+------------------------------------------------------------------------
+Casos aprobados: 21 de 21
+Fecha de ejecución: 21/11/2026, 1:49:06 a. m.
+========================================================================
